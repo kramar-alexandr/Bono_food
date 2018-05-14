@@ -5845,6 +5845,7 @@ window IVJRClass:3
   wtag("language","LAT"), wtag("product","*"), wtag("productcode","*"), wtag("device","computer")
 begin
   real h,h2,hs,v,v3,vm,vs,l;
+  real myv;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:48:55
 
   WindowBegin("Veidot rēķinu žurnālu",IVJRClass,CGRcW,RcType);
   if (IsEnterprise) then begin
@@ -5922,6 +5923,14 @@ begin
   end else begin
     EditFieldTL(h,v+=vs,100,"PVN kods",M4UStr,Normal,100,f13,false,VATCodeSClass);
    end;
+   
+  myv = v;
+  ButtonFrame(h-140,myv = (myv+=40),190,4,"Additional info");// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:41:15
+	CheckBox(h-140,myv,0,"Rādīt nosūtīšanas adrešu kodu",flags[26]);
+	CheckBox(h-140,myv+=16,0,"Rādīt nosūtīšanas adreses",flags[27]);
+	CheckBox(h-140,myv+=16,0,"Rādīt maršrutu",flags[28]);
+	CheckBox(h-140,myv+=16,0,"Rādīt svaru",flags[29]);
+   
    if (IsEnterprise) then begin
      h = 320;
      v = vm + 10;
@@ -5949,11 +5958,11 @@ begin
   end else begin
     h = 30;
    end;
-  ButtonFrame(h,v,123,3,"Rādīt");
-    RadioButton(h,v,0,0,"Pārskatu",ArtMode);
-    RadioButton(h,v+=16,1,0,"Detalizēti",ArtMode);
+  ButtonFrame(h+60,v,93,3,"Rādīt");
+    RadioButton(h+60,v,0,0,"Pārskatu",ArtMode);
+    RadioButton(h+60,v+=16,1,0,"Detalizēti",ArtMode);
    if (HasMultiCurrency) then begin
-    RadioButton(h,v+=16,4,0,"Pārskats ar val.",ArtMode);
+    RadioButton(h+60,v+=16,4,0,"Pārskats ar val.",ArtMode);
    end;
    EndFrame;
    if (IsEnterprise==false and HasBase2) then begin

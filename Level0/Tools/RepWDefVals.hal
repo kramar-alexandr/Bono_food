@@ -1926,6 +1926,12 @@ begin
   end;
   if (UserHasLimitedAccess(RepSpec.AccStr,RepSpec.Comment)) then begin
   end;
+  
+  RepSpec.flags[26] = 1;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:58:16
+  RepSpec.flags[27] = 1;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:58:17
+  RepSpec.flags[28] = 1;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:58:17
+  RepSpec.flags[29] = 1;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:58:18
+  
   PutWindowRecord(wn,RepSpec);
   SelectWindow(wn);
   return;

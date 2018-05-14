@@ -85,6 +85,13 @@ begin
   SString(1100032,"Akc. cena");
   SString(1100033,"Min. derīguma termiņam jābūt lielākam vai vienādam ar 0");
   SString(1100034,"Derīguma termiņš neatblist minimālajām prasībām");
-
+  
+  //INvListRn // Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:04:14
+  SString(1100035,"Adr. kods");
+  SString(1100036,"Adrese");
+	SString(1100037,"Maršruts");
+	SString(1100038,"Neto sv.");
+	SString(1100039,"Kopā Net weight");
+	
   return;
 end;

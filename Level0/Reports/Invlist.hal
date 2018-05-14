@@ -622,6 +622,7 @@ begin
   val totv,vatv,t1;
   string 255 frin,toin;
   record COCUServiceVc COCUSr;
+  val TotalWeight;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:27:04
 
   RepSpec.sStartDate2 = FirstInRange(RepSpec.Period2Str2,10);
   RepSpec.sEndDate2 = LastInRange(RepSpec.Period2Str2,10);
@@ -762,9 +763,23 @@ begin
       end;
       StartFormat(15);
       OutString(0,0,USetStr(2352),false);//0
+      
+      if(RepSpec.flags[27]==1)then begin
+      	OutString(20,0,USetStr(1100036),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+      end;
+      if(RepSpec.flags[26]==1)then begin
+      	OutString(40,0,USetStr(1100035),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:53
+      end;
+      
       if (RepSpec.flags[16]!=0 and RepSpec.flags[10]!=3) then begin
         OutString(60,0,USetStr(3509),false);
         OutString(120,0,USetStr(2353),false);
+        if(RepSpec.flags[28]==1)then begin
+					OutString(150,0,USetStr(1100037),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+				end;
+				if(RepSpec.flags[29]==1)then begin
+					OutString(160,0,USetStr(1100038),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+				end;
         if (overviewpervatcodef) then begin
           OutString(170,0,USetStr(2358),false);
         end else begin
@@ -774,12 +789,22 @@ begin
       end else begin
         OutString(60,0,USetStr(2353),false);//60
         OutString(110,0,USetStr(2354),false);//110
+        if(RepSpec.flags[28]==1)then begin
+					OutString(200,0,USetStr(1100037),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+				end;
+				if(RepSpec.flags[29]==1)then begin
+					OutString(250,0,USetStr(1100038),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+				end;
         if (overviewpervatcodef) then begin
           OutString(170,0,USetStr(2358),false);//280
         end else begin
           OutString(285,0,USetStr(2358),false);//280
         end;
       end;
+      
+      
+      
+      
       if (RepSpec.flags[15]!=0) then begin
         OutStringAdjust(5,0,USetStr(2328),true,M4Val);
         OutStringAdjust(6,0,USetStr(2329),true,M4Val);
@@ -1577,8 +1602,23 @@ LkInvoiceTypeCredit1:;
                 end else begin
                   OutStringOvst(0,"DblCustPS2",CreateInvoiceNumber(IVr.SerNr,IVr.OfficialSerNr),false,IVr.Invalid);
                 end;
+                
+                if(RepSpec.flags[27]==1)then begin
+									OutString(20,0,IVr.ShipAddr1,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+								end;
+								if(RepSpec.flags[26]==1)then begin
+									OutString(40,0,IVr.DelAddrCode,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:53
+								end;
+								
                 OutDate(60,0,IVr.InvDate,false);
                 OutStringCut(110,220,0,IVr.Addr0,false,0);
+                if(RepSpec.flags[28]==1)then begin
+									OutString(200,0,IVr.Sorting,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+								end;
+								if(RepSpec.flags[29]==1)then begin
+									OutString(250,0,IVr.BLT_TotalNetWeight,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+								end;
+								TotalWeight = TotalWeight + IVr.BLT_TotalNetWeight;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:26:44
                 OutString(285,0,tstr,false);
               end;
               if (RepSpec.flags[15]!=0) then begin
@@ -1710,6 +1750,12 @@ LkInvoiceTypeCredit1:;
 
   if (RepSpec.ArtMode==0) then begin
     Gray_Divider(0,1);
+    if(RepSpec.flags[29]==1)then begin
+			startformat(15);
+				outstring(200,0,USetStr(1100039),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:31:01);
+				outstring(250,0,TotalWeight,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:31:01);
+			endformat;
+    end;
     if (RepSpec.flags[15]==1) then begin
       if (overviewpervatcodef) then begin
         PrintCurncyTotals(acur,av1,av2,av3,curcnt,5,6,4,170,true,RepSpec.PocketPC);

@@ -5975,6 +5975,7 @@ window IVJRClass:3
   wtag("language","ENG"), wtag("product","*"), wtag("productcode","*"), wtag("device","computer")
 begin
   real h,h2,hs,v,v3,vm,vs,l;
+  real myv;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:48:55
 
   WindowBegin("Specify Invoice Journal",IVJRClass,CGRcW,RcType);
   if (IsEnterprise) then begin
@@ -6052,6 +6053,15 @@ begin
   end else begin
     EditFieldTL(h,v+=vs,100,"#VAT# Code",M4UStr,Normal,100,f13,false,VATCodeSClass);
   end;
+  
+  myv = v;
+  ButtonFrame(h-140,myv = (myv+=40),190,4,"Additional info");// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 10:41:15
+	CheckBox(h-140,myv,0,"Show Delivery Address code",flags[26]);
+	CheckBox(h-140,myv+=16,0,"Show Delivery Addresses",flags[27]);
+	CheckBox(h-140,myv+=16,0,"Show Route",flags[28]);
+	CheckBox(h-140,myv+=16,0,"Show Weight",flags[29]);
+  
+  
   if (IsEnterprise) then begin
     h = 320;
     v = vm + 10;
@@ -6079,11 +6089,11 @@ begin
   end else begin
     h = 30;
   end;
-  ButtonFrame(h,v,123,3,"Function");
-  RadioButton(h,v,0,0,"Overview",ArtMode);
-  RadioButton(h,v+=16,1,0,"Detailed",ArtMode);
+  ButtonFrame(h+60,v,123,3,"Function");
+  RadioButton(h+60,v,0,0,"Overview",ArtMode);
+  RadioButton(h+60,v+=16,1,0,"Detailed",ArtMode);
   if (HasMultiCurrency) then begin
-    RadioButton(h,v+=16,4,0,"Overview with Cur.",ArtMode);
+    RadioButton(h+60,v+=16,4,0,"Overview with Cur.",ArtMode);
   end;
   EndFrame;
   if (IsEnterprise==false and HasBase2) then begin
