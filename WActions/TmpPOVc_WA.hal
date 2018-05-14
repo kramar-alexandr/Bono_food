@@ -1,0 +1,94 @@
+remote updating function LongInt EBS_RecordAction_raPastePOInPU(var record POVc,var record PUVc,array string,array val,array string,array date,array integer);
+external function integer EBS_GetRowNumber(longint); //EBS
+
+global
+function Boolean TmpPODClassInsertRowTest(Integer wn, Integer rownr)
+BEGIN
+
+  TmpPODClassInsertRowTest = false;
+  return;
+end;
+
+global
+procedure SplitRowTmpPODsm()
+begin
+  record TmpPOVc TmpPOr;
+  row TmpPOVc frTmpPOrw,toTmpPOrw;
+  Integer wn,rownr;
+
+  wn = CurWindow;
+  GetWindowRecord(wn,TmpPOr);
+  rownr = WindowActiveRow(wn);
+  DeselectWindow(wn,false);
+  if (rownr>=0) then begin
+    MatRowGet(TmpPOr,rownr,frTmpPOrw);
+    CopyRow(TmpPOr,frTmpPOrw,toTmpPOrw);
+   // toPUrw.OrdRow = -1;
+    MatRowInsert(TmpPOr,rownr+1,toTmpPOrw);
+    PutWindowRecord(wn,TmpPOr);
+  end else begin
+    Beep;
+  end;
+
+  RETURN
+END;
+
+global updating
+procedure TmpPODClass_CreatePUVc()
+begin
+  record POVc POr;
+  record PUVc PUr;
+  record TmpPOVc TmpPOr;
+  row TmpPOVc TmpPOrw;
+  integer i,rwc,size,wn,nwn;
+  longint r;
+  array string 255 arrItems,arrSerials;
+  array val arrQtys;
+  array date arrBestBefores;
+  array integer arrPORows;
+
+  wn = CurWindow;
+  DeselectWindow(wn,true);
+  GetWindowRecord(wn,TmpPOr);
+  SortRows(TmpPOr,"BestBeforeDate",true);
+
+  rwc = MatRowCnt(TmpPOr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(TmpPOr,i,TmpPOrw);
+    arrItems[size]       = TmpPOrw.ArtCode;
+    arrQtys[size]        = TmpPOrw.Quant;
+    arrSerials[size]     = TmpPOrw.SerialNr;
+    arrBestBefores[size] = TmpPOrw.BestBeforeDate;
+    arrPORows[size]      = TmpPOrw.PORowNr;
+    size = size + 1;
+  end;
+
+  POr.SerNr = TmpPOr.SerNr;
+  ReadFirstMain(POr,1,true);
+  r = EBS_RecordAction_raPastePOInPU(POr,PUr,arrItems,arrQtys,arrSerials,arrBestBefores,arrPORows);
+
+  if r>=31000 and r<32000 then begin
+    SelectWindow(wn);
+    WindowFieldGoto(wn,TmpPOr,EBS_GetRowNumber(r),"ArtCode",true);
+    if r>=31000 and r<31500 then begin
+      MessageBox(1100006,"");
+    end;
+    if r>=31500 and r<32000 then begin
+      MessageBox(1100007,"");
+    end;
+    r = -1;
+  end;
+
+  switch (r) begin
+    case -1: Beep;
+    case -2: MessageBox(1281,"");
+    case 0:
+      CloseWindow(wn);
+      nwn = OpenWindow("PUDClass",1,0,"","",PUr);
+    otherwise
+      MessageBox(r,"");
+  end;
+  UpdateBrowses("POVc");
+
+  return;
+end;

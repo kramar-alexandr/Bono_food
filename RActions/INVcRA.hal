@@ -1,0 +1,15 @@
+
+global
+function LongInt INVcRecordDefaults(var record INVc INr,record INVc IN2r,LongInt stat,LongInt long4)
+begin
+  LongInt res;
+  record ItemSettingBlock ItemSettingbl;
+
+  res = inner.INVcRecordDefaults(INr,IN2r,stat,long4);
+
+  BlockLoad(ItemSettingbl);
+  INr.EBS_ReqBestBefore = ItemSettingbl.EBS_ReqBestBefore;
+
+  INVcRecordDefaults = res;
+  return;
+end;

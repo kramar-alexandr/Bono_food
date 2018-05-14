@@ -1,0 +1,144 @@
+external inner procedure ExportXmlNL(string);
+external inner procedure ExportXmlTagOpen(string);
+external inner procedure ExportXmlTagClose(string);
+external inner function string 255 ConvertXmlString(string,Boolean);
+external function Boolean BLT_CreateExpFile(string,string);
+
+updating
+procedure ExportOneORVc(var record ORVc ORr)
+begin
+  record CUVc CUr;
+  record DelRouteVc DelRouter;
+  record ORVc oldORr;
+  row ORVc ORrw;
+  integer i,rwc;
+
+  DelRouter.Code = ORr.Sorting;
+  ReadFirstMain(DelRouter,1,true);
+  CUr.Code = ORr.CustCode;
+  ReadFirstMain(CUr,1,true);
+
+  ExportXmlTagOpen("<delivery>");
+  ExportXmlNL("<id>" & ORr.SerNr & "</id>");
+  ExportXmlNL("<customer_id>" & ORr.CustCode & "</customer_id>");
+  ExportXmlNL("<customer_name>" & ConvertXmlString(ORr.Addr0,false) & "</customer_name>");
+  ExportXmlNL("<customer_code>" & ConvertXmlString(CUr.UserStr1,false) & "</customer_code>");
+  ExportXmlNL("<address>" & ConvertXmlString(ORr.ShipAddr1,false) & "</address>");
+  ExportXmlNL("<route_id>" & ConvertXmlString(ORr.Sorting,false) & "</route_id>");
+  ExportXmlNL("<route_master>" & ConvertXmlString(DelRouter.Comment,false) & "</route_master>");
+  ExportXmlNL("<date>" & DateToString(ORr.PlanShipDate,"YYYY-MM-DD") & "</date>");
+  ExportXmlTagOpen("<product_list>");
+  rwc = MatRowCnt(ORr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(ORr,i,ORrw);
+    if nonblank(ORrw.ArtCode) then begin
+      ExportXmlTagOpen("<product_listitem>");
+      ExportXmlNL("<product_id>" & ORrw.ArtCode & "</product_id>");
+      ExportXmlNL("<quantity>" & ValToString(ORrw.Quant,M45Val,"",".",0) & "</quantity>");
+      ExportXmlTagClose("</product_listitem>");
+    end;
+  end;
+
+  ExportXmlTagClose("</product_list>");
+  ExportXmlTagClose("</delivery>");
+
+  if ORr.BLT_Exportf==0 then begin
+    RecordCopy(oldORr,ORr);
+    ORr.BLT_Exportf = 1;
+    if RecordUpdate(oldORr,ORr,true)!=0 then begin
+      LogText(0,"ExprotOneORVc ERROR :: Could not update ORVc record " & ORr.SerNr);
+    end;
+  end;
+
+  return;
+end;
+
+updating
+procedure ExportORVc(record RcVc RepSpec)
+begin
+  record ORVc ORr;
+  boolean wloop,testf;
+
+  SetExportCodePage("UTF-8");
+  ExportXmlNL("<?xml version=\"1.0\"?>");
+  ExportXmlTagOpen("<root>");
+  ExportXmlTagOpen("<deliveries_list>");
+
+  wloop = true;
+  ORr.PlanShipDate = RepSpec.sStartDate;
+  While LoopKey("PlanShipDate",ORr,1,wloop) begin
+    if ORr.PlanShipDate > RepSpec.sEndDate then begin
+      wloop = false;
+    end else begin
+      testf = true;
+      if RepSpec.long1!=-1 and ORr.SerNr!=RepSpec.long1 then begin
+        testf = false;
+      end;
+      if ORr.BLT_Exportf==1 and RepSpec.flags[0]==0 then begin
+        testf = false;
+      end;
+      if ORr.BLT_Exportf==0 and RepSpec.flags[1]==0 then begin
+        testf = false;
+      end;
+      if testf then begin
+        if MatRowCnt(ORr)==0 then begin
+          testf = false;
+        end;
+      end;
+      if testf then begin
+        ExportOneORVc(ORr);
+      end;
+    end;
+  end;
+
+  ExportXmlTagClose("</deliveries_list>");
+  ExportXmlTagClose("</root>");
+
+  return;
+end;
+
+global updating
+procedure BLT_ORToScannerMn(Record RcVc RepSpec)
+Begin
+  record BLT_ScannerSetBlock BLT_ScannerSetbl;
+  string 255 filename,tmpfile;
+
+  BlockLoad(BLT_ScannerSetbl);
+
+  if blank(BLT_ScannerSetbl.SHExpFolder) then begin
+    LogText(0,"BLT_ORToScannerMn ERROR :: Blank export folder, please check settings!");
+    GoTo LBLT_ORToScannerMn;
+  end;
+
+  if blank(BLT_ScannerSetbl.SHFileName) then begin
+    LogText(0,"BLT_ORToScannerMn ERROR :: Blank export file name, please check settings!");
+    GoTo LBLT_ORToScannerMn;
+  end;
+
+  SetFileOnServer(true); //thsi is needed for win server
+  filename = BLT_ScannerSetbl.SHFileName;
+  tmpfile = "tmp/" & filename;
+
+  if FileExists(tmpfile) then begin
+    Delete_File(tmpfile);
+  end;
+
+  //Create export file
+  BLT_CreateExpFile(filename,"tmp");
+
+  //Open export file
+  OpenExportFile(tmpfile, true);
+
+  //Export SHVc records
+  ExportORVc(RepSpec);
+
+  //Close file
+  CloseFile;
+
+  //Move file
+  MoveFile(filename,"tmp",BLT_ScannerSetbl.SHExpFolder);
+  SetFileOnServer(false);
+
+LBLT_ORToScannerMn:;
+return;
+end;

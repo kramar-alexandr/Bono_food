@@ -1,0 +1,123 @@
+external inner procedure In2Period(var string,var Date,var Date);
+
+global
+procedure StockMovJRClassReportDefaults(integer wn)
+begin
+  record RcVc RepSpec;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"StockMovJRClass");
+  RepSpec.sStartDate = CurrentDate;
+  RepSpec.sEndDate   = CurrentDate;
+  RepSpec.Period2Str = RepSpec.sStartDate & ":" & RepSpec.sEndDate;
+  RepSpec.flags[5]   = 1;
+  RepSpec.ArtMode    = 2;
+  PutWindowRecord(wn,RepSpec);
+  SelectWindow(wn);
+  return;
+end;
+
+global
+procedure BLT_CreateSHsFSOsVClassReportDefaults(Integer wn)
+BEGIN
+  record RcVc RepSpec;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"BLT_CreateSHsFSOsVClass");
+  RepSpec.d1 = CurrentDate;
+  RepSpec.ArtMode = 1;
+  PutWindowRecord(wn,RepSpec);
+  SelectWindow(wn);
+  RETURN;
+END;
+
+global
+procedure BLT_PUToScannerVClassReportDefaults(Integer wn)
+begin
+  record RcVc RepSpec;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"BLT_PUToScannerVClass");
+  RepSpec.flags[1] = 1;
+  Putwindowrecord(wn,RepSpec);
+  SelectWindow(wn);
+
+return;
+end;
+
+global
+procedure BLT_SHToScannerVClassReportDefaults(Integer wn)
+begin
+  record RcVc RepSpec;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"BLT_SHToScannerVClass");
+  RepSpec.flags[1] = 1;
+  Putwindowrecord(wn,RepSpec);
+  SelectWindow(wn);
+
+return;
+end;
+
+global
+procedure BLT_ORToScannerVClassReportDefaults(Integer wn)
+begin
+  record RcVc RepSpec;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"BLT_ORToScannerVClass");
+  RepSpec.flags[1] = 1;
+  Putwindowrecord(wn,RepSpec);
+  SelectWindow(wn);
+
+return;
+end;
+
+global
+procedure SalesForecastRClassReportDefaults(integer wn)
+begin
+  record RcVc RepSpec;
+  date td,sd,ed;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"SalesForecastRClass");
+  td = CurrentDate;
+  sd = AddDay(td,-(GetDateId(td) - 1));
+  ed = AddDay(sd, 27);
+  RepSpec.sStartDate = sd;
+  RepSpec.sEndDate = ed;
+  RepSpec.Period2Str = RepSpec.sStartDate & ":" & RepSpec.sEndDate;
+  Putwindowrecord(wn,RepSpec);
+  SelectWindow(wn);
+
+  return;
+end;
+
+global
+function Boolean BLT_SHAndIVImportVClassAfterEditField(Integer wn,string fieldname,Integer fn,Integer rownr,Integer changed)
+begin
+  Boolean res;
+  record RcVc RepSpec;
+  Date d1,d2;
+  string 255 tstr;
+
+  res = false;
+  switch (fieldname) begin
+    case "Stext":
+      GetWindowRecord(wn,RepSpec);
+      In2Period(RepSpec.Stext,d1,d2);
+      tstr = d1;
+      tstr = tstr & ":";
+      tstr = tstr & d2;
+      RepSpec.Stext = tstr;
+      PutWindowRecord(wn,RepSpec);
+  end;
+  BLT_SHAndIVImportVClassAfterEditField = res;
+  return;
+end;

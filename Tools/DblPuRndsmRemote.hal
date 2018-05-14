@@ -1,0 +1,558 @@
+external inner function roundmode SetRoundModeD(Integer);
+external inner procedure GetStockValue(string,string,var record ItemStatusVc);
+external inner function Boolean SetInSet2(string,string);
+external inner procedure ItemClassTypef(string,string,var Boolean);
+external inner procedure GetItemLocationTurnover(string,record INVc,Boolean,Date,Date,string,string,string,string,Integer,var val);
+remote inner function Boolean POQTVc_PasteVECode(var record POQTVc,Boolean);
+remote inner function Boolean POQTVc_PasteArtCode(var record POQTVc,Integer,Boolean);
+external inner function Boolean POQTDchrsum(record POQTVc,Integer);
+remote inner procedure POQTSumup(var record POQTVc);
+remote inner function Boolean StockMovVc_PasteQuant(var record StockMovVc,Integer);
+remote inner function Boolean StockMovVc_PasteArtCode(var record StockMovVc,Integer,Integer,var array string);
+
+global
+procedure FindMinLevel(var val mlevel, string location, string item,Boolean varf)
+begin
+  record MinPerLocVc MinPer;
+  Boolean TrHs,found;
+  Integer keys;
+
+  MinPer.ItemCode = item;
+  keys = 1;
+  if (nonblank(location)) then begin
+    MinPer.Location = location;
+    keys = 2;
+  end;
+  TrHs = true;
+  while LoopMain(MinPer,keys,TrHs) begin
+    if (varf) then begin
+      if (MinPer.ItemCode!=item) then begin
+        TrHs = false;
+      end;
+    end else begin
+      if (MinPer.ItemCode!=item) then begin
+        TrHs = false;
+      end;
+    end;
+    if (nonblank(location)) then begin
+      if (MinPer.Location!=location) then begin
+        TrHs = false;
+      end;
+    end;
+    if (TrHs) then begin
+      mlevel = mlevel + MinPer.MinLevel;
+      found = true;
+    end;
+  end;
+  if (found==false) then begin
+    TrHs = true;
+    ResetLoop(MinPer);
+    while LoopMain(MinPer,keys,TrHs) begin
+      if (varf) then begin
+        if (MinPer.ItemCode!=item) then begin
+          TrHs = false;
+        end;
+      end else begin
+        if (MinPer.ItemCode!=item) then begin
+          TrHs = false;
+        end;
+      end;
+      if (nonblank(location)) then begin
+        if (MinPer.Location!=location) then begin
+          TrHs = false;
+        end;
+      end;
+      if (TrHs) then begin
+        mlevel = mlevel + MinPer.MinLevel;
+        found = true;
+      end;
+    end;
+  end;
+  return;
+end;
+
+global
+Function Boolean FindPItem(string itemcode,string location,var record PIVc PIp,string veselect,Integer matchve)
+begin
+  Boolean res;
+  record POSettingBlock POSetRec;
+
+  PIp.DefaultChoice = 1;
+  PIp.ItemCode = itemcode;
+  PIp.Location = location;
+  res = ReadFirstKey("DefaultChoice",PIp,3,true);
+  if (res==false) then begin
+    if (nonblank(location)) then begin
+      PIp.DefaultChoice = 1;
+      PIp.ItemCode = itemcode;
+      PIp.Location = "";
+      res = ReadFirstKey("DefaultChoice",PIp,3,true);
+    end;
+  end;
+  if (matchve!=0) then begin
+    if (nonblank(veselect)) then begin
+      if (veselect!=PIp.VECode) then begin
+        res = false;
+        goto LFindPItem;
+      end;
+    end;
+  end else begin
+    if (nonblank(veselect)) then begin
+      PIp.DefaultChoice = 1;
+      PIp.ItemCode = itemcode;
+      PIp.Location = location;
+      PIp.VECode = veselect;
+      res = ReadFirstKey("DefaultChoice",PIp,4,true);
+      if (res==false) then begin
+        PIp.ItemCode = itemcode;
+        PIp.VECode = veselect;
+        res = ReadFirstKey("MainKey",PIp,2,true);
+      end;
+      if (res==false) then begin
+        if (nonblank(location)) then begin
+          PIp.DefaultChoice = 1;
+          PIp.ItemCode = itemcode;
+          PIp.Location = "";
+          PIp.VECode = veselect;
+          res = ReadFirstKey("DefaultChoice",PIp,4,true);
+        end;
+      end;
+    end;
+  end;
+  if (res==false) then begin
+    BlockLoad(POSetRec);
+    if (nonblank(POSetRec.DefaultSupplier)) then begin
+      RecordNew(PIp);
+      PIp.ItemCode = itemcode;
+      PIp.VEItemCode = itemcode;
+      PIp.VECode = POSetRec.DefaultSupplier;
+      res = true;
+    end;
+  end;
+
+LFindPItem:;
+  FindPItem = res;
+  return;
+end;
+
+global
+Function Boolean FindPOQantity1(record RcVc RepSpec,record INVc INp,record ItemStatusVc ISp,Boolean varf,string location,record PIVc PIp,var val t1p,var val t2p,var val minlevel,val predsales,Boolean defic,Boolean checkpif,Boolean checkminpoqty)
+begin
+//try to make same as FindPOQty2
+  Boolean res;
+  val t;
+  record POSettingBlock POb;
+  Integer it;
+  date sdate,edate;
+  val sale;
+
+  BlockLoad(POb);
+  minlevel = blankval;
+  FindMinLevel(minlevel,location,INp.Code,varf);
+  if (blank(minlevel)) then begin
+    minlevel = INp.MinLevel;
+  end;
+  //
+  GetItemLocationTurnover(INp.Code,INp,false,RepSpec.sStartDate,RepSpec.sEndDate,location,location,"","",0,sale);
+  minlevel = minlevel + sale;
+  //
+  GetStockValue(INp.Code,location,ISp);
+  t1p = ISp.Instock - ISp.OrddOut + ISp.POUnOKQty - ISp.ProdOrd;
+  t2p = 0;
+  t   = 0;
+  t1p = t1p - predsales;
+  if (t1p<minlevel) then begin
+    t2p = minlevel - t1p;
+  end;
+
+  res = true;
+  if (PIp.ItemCode=="") then begin
+    res = false;
+  end;
+  if (res) and (checkpif) then begin
+    if (t2p>0) then begin
+      t = t2p;
+      if (PIp.NormPOQty!=0) and (defic==false) then begin
+        if (PIp.NormPOQty>t2p) then begin
+          t2p = PIp.NormPOQty;
+        end;
+        if (POb.UseNormOrdMult!=0) then begin
+          t = t2p/PIp.NormPOQty;
+          t = t + 49999.00/100000.00;
+          t = Round(t,SetRoundModeD(0));
+          t2p = t*PIp.NormPOQty;
+        end;
+      end;
+      if (checkminpoqty) then begin
+        if (PIp.MinPOQty!=0) then begin
+          if (PIp.MinPOQty>t2p) then begin
+            t2p = PIp.MinPOQty;
+          end;
+        end;
+      end;
+    end;
+  end;
+  FindPOQantity1 = res;
+  return;
+end;
+
+procedure AddToUniqueMasive2(var array string MainElements,string ElementToCheck)
+begin
+  integer i,rw;
+  boolean Exists;
+
+  rw = StringToInt(MainElements[0]);
+  if rw>0 then begin
+    For(i=1;i<=rw;i=i+1)begin
+      if MainElements[i]==ElementToCheck then begin
+        Exists = true;
+        i = rw + 1;
+      end;
+    end;
+  end else begin
+    rw = 0;
+  end;
+  if !Exists then begin
+    rw = rw + 1;
+    MainElements[0] = rw;
+    MainElements[rw] = ElementToCheck;
+  end;
+end;
+
+procedure AddToUniqueMasive(var array string ElementMas,var array string ItemMas,var array integer SumMas,string ElementToCheck,string Item,integer InputSum)
+begin
+  integer i,rw;
+  boolean Exists;
+
+  rw = StringToInt(ElementMas[0]);
+  if rw>0 then begin
+    for(i=1;i<=rw;i=i+1)begin
+      if ElementMas[i]==ElementToCheck and ItemMas[i]==Item then begin
+        SumMas[i] = SumMas[i] + InputSum;
+        Exists = true;
+        i = rw + 1;
+      end;
+    end;
+  end else begin
+    rw = 0;
+  end;
+  if !Exists then begin
+    rw = rw + 1;
+    ElementMas[0] = rw;
+    ElementMas[rw] = ElementToCheck;
+    ItemMas[rw] = Item;
+    SumMas[0] = rw;
+    SumMas[rw] = InputSum;
+  end;
+end;
+
+procedure PrintData(Integer namepos,record RcVc RepSpec,string itemcode,record INVc INr,Boolean varf,var array string VECodeArr,var array string ItemArr,var array integer QtyArr)
+begin
+  record PIVc PIr;
+  record ItemStatusVc ISr;
+  Boolean printf,pifound;
+  val t,t1,t2,minlevel;
+  string 20 vecode;
+
+  pifound = FindPItem(INr.Code,RepSpec.FirstAcc,PIr,RepSpec.f2,0);
+  printf = true;
+  if (pifound==false) then begin
+    PIr.ItemCode = "";
+    printf = false;//
+  end;
+  if (nonblank(RepSpec.AccStr)) then begin
+    if (pifound==false) then begin
+      printf = false;
+    end else begin
+      if (PIr.SalesMan<>RepSpec.AccStr) then begin
+        printf = false;
+      end;
+    end;
+  end;
+  if (nonblank(RepSpec.Stext)) then begin
+    if (pifound==false) then begin
+      printf = false;
+    end else begin
+      if (PIr.SalesGroup<>RepSpec.Stext) then begin
+        printf = false;
+      end;
+    end;
+  end;
+  pifound = FindPOQantity1(RepSpec,INr,ISr,varf,RepSpec.FirstAcc,PIr,t1,t2,minlevel,0,true,RepSpec.flags[5]!=0,false);
+  if ((RepSpec.flags[3]==0) or (t1<>0)) then begin
+    if (RepSpec.flags[4]==1) then  begin
+      if (t2==0) then begin
+        printf = false;
+      end;
+    end;
+    if (printf) then begin
+    	vecode = PIr.VECode;
+    	if PIr.VEOrder==0 then begin
+      	vecode = "";
+      end;
+      if t2>0 then begin
+        AddToUniqueMasive(VECodeArr,ItemArr,QtyArr,vecode,INr.Code,t2);
+      end;
+    end;
+  end;
+  return;
+end;
+
+procedure PrintOneItemData(record RcVc RepSpec,record INVc INr,Boolean varf,var string lastgroup,var Boolean itemout,var array string VECodeArr,var array string ItemArr,var array integer QtyArr)
+begin
+  record ITVc ITr;
+  string 255 namestr;
+
+  PrintData(90,RepSpec,INr.Code,INr,varf,VECodeArr,ItemArr,QtyArr);
+  return;
+end;
+
+procedure TestItem(record RcVc RepSpec,record INVc INr,string fromart,string toart,string frcc,string tocc,string frdep,string todep,
+                   var Boolean testf,var Boolean TrHs)
+begin
+  testf = true;
+  if (nonblank(RepSpec.LastAcc)) then begin
+    if (INr.Department<frdep) then begin
+      testf = false;
+    end;
+    if (INr.Department>todep) then begin
+      testf = false;
+    end;
+  end;
+  if (INr.ItemType<>1) then begin testf = false; end;
+  if (RepSpec.flags[2]==0) then begin
+      if (TrHs) then begin
+        if (nonblank(tocc)) then begin
+          if (INr.Group>tocc) then begin
+            testf = false;
+          end;
+        end;
+      end;
+      if (TrHs) then begin
+        if (nonblank(frcc)) then begin
+          if (INr.Group<frcc) then begin
+            testf = false;
+          end;
+        end;
+      end;
+      if (TrHs) then begin
+        if (nonblank(toart)) then begin
+          if (INr.Code>toart) then begin
+            TrHs = false;
+          end;
+        end;
+      end;
+  end;
+  if (RepSpec.flags[2]==1) then begin
+      if (TrHs) then begin
+        if (nonblank(tocc)) then begin
+          if (INr.Group>tocc) then begin
+            TrHs = false;
+          end;
+        end;
+      end;
+      if (TrHs) then begin
+        if (nonblank(toart)) then begin
+          if (INr.Code>toart) then begin
+            testf = false;
+          end;
+        end;
+      end;
+      if (TrHs) then begin
+        if (nonblank(fromart)) then begin
+          if (INr.Code<fromart) then begin
+            testf = false;
+          end;
+        end;
+      end;
+  end;
+  if (RepSpec.flags[2]==2) then begin
+      if (TrHs) then begin
+        if (nonblank(tocc)) then begin
+          if (INr.Group>tocc) then begin
+            testf = false;
+          end;
+        end;
+      end;
+      if (TrHs) then begin
+        if (nonblank(frcc)) then begin
+          if (INr.Group<frcc) then begin
+            testf = false;
+          end;
+        end;
+      end;
+      if (TrHs) then begin
+        if (nonblank(toart)) then begin
+          if (INr.Code>toart) then begin
+            testf = false;
+          end;
+        end;
+      end;
+      if (TrHs) then begin
+        if (nonblank(fromart)) then begin
+          if (INr.Code<fromart) then begin
+            testf = false;
+          end;
+        end;
+      end;
+  end;
+  if (TrHs) then begin
+    if (INr.Terminated<>0) then begin
+      testf = false;
+    end;
+  end;
+  if (nonblank(RepSpec.f4)) then begin
+    if (SetInSet2(RepSpec.f4,INr.DispGroups)==false) then begin
+      testf = false;
+    end;
+  end;
+  if (nonblank(RepSpec.f5)) then begin
+    if (testf==true) then begin
+      testf = false;
+      ItemClassTypef(RepSpec.f5,INr.DispGroups,testf);
+    end;
+  end;
+  if (TrHs==false) then begin testf = false; end;
+  return;
+end;
+
+global
+procedure DblPuRndsmfunctionRemote(record RcVc RepSpec,var array record POQTVc POQTrArr,var array record StockMovVc SMrArr,var integer pcnt,var integer scnt)
+begin
+  record INVc INr;
+  record ITVc ITr;
+  record ItemStatusVc ISr;
+  String 255 tstr;
+  Integer rw,rwcnt,i,j;
+  Boolean pifound;
+  Boolean TrHs;
+  val t,t1,t2;
+  String 255 fromart,toart;
+  String 255 frcc,tocc;
+  String 255 lastgroup;
+  Boolean itemout;
+  Boolean testf,varf;
+  Boolean printf;
+  String 255 ckey;
+  Integer keys;
+  String 255 namestr;
+  String 20 frdep,todep;
+  val minlevel;
+  string 255 itsz,mask,subsets,mskrep;
+  array string 20 VECodeArr,ItemArr,uVeArr;
+  array integer QtyArr;
+  record StockMovVc SMr;
+  row StockMovVc SMrw;
+  record POQTVc POQTr;
+  row POQTVc POQTrw;
+  record MainStockBlock MSbl;
+  record UserVc USr;
+  integer rownr,wn;
+  array string 20 wdr;
+  boolean res;
+  string 20 defpos;
+  record PosVc Posr;
+  val wrn;
+
+  BLockLoad(MSbl);
+  Posr.Location = MSbl.MainStock;
+  if ReadFirstKey("Location",Posr,1,true) then begin
+  	defpos = Posr.Code;
+  end;
+  fromart = FirstInRange(RepSpec.f1,20);
+  toart =  LastInRange(RepSpec.f1,20);
+  frcc = FirstInRange(RepSpec.f3,5);
+  tocc = LastInRange(RepSpec.f3,5);
+
+  frdep = FirstInRange(RepSpec.LastAcc,10);
+  todep = LastInRange(RepSpec.LastAcc,10);
+
+  itemout = false;
+  lastgroup ="";
+  rw = 1;
+  if (RepSpec.flags[2]==0) then begin
+    INr.Code = fromart;
+    ckey = "Code";
+    keys = 1;
+  end;
+  if (RepSpec.flags[2]==1) then begin
+    INr.Group = frcc;
+    INr.Code = fromart;
+    ckey = "Group";
+    keys = 2;
+  end;
+  if (RepSpec.flags[2]==2) then begin
+    INr.Name = "";
+    ckey = "Name";
+    keys = 1;
+  end;
+  TrHs = true;
+  if (TrHs) then begin
+    while (LoopKey(ckey,INr,keys,TrHs)) begin
+      TestItem(RepSpec,INr,fromart,toart,frcc,tocc,frdep,todep,testf,TrHs);
+      if (testf) then begin
+        PrintOneItemData(RepSpec,INr,varf,lastgroup,itemout,VECodeArr,ItemArr,QtyArr);
+      end;
+    end;
+  end;
+  rwcnt = StringToInt(VECodeArr[0]);
+  if rwcnt>0 then begin
+    for (i=1;i<=rwcnt;i=i+1) begin
+    	AddToUniqueMasive2(uVeArr,VECodeArr[i]);
+    end;
+  end;
+  rw = StringToInt(uVeArr[0]);
+  if rw>0 then begin
+    for (i=1;i<=rw;i=i+1) begin
+    	if uVeArr[i]=="" then begin
+    		RecordNew(SMr);
+    		SMr.OrdTransDate = CurrentDate;
+    		//SMr.SalesMan = CurrentUser;
+    		SMr.FrLocation = MSbl.MainStock;
+    		SMr.ToLocation = RepSpec.FirstAcc;
+    		SMr.FrPos = defpos;
+    	end else begin
+    		RecordNew(POQTr);
+    		POQTr.VECode = uVeArr[i];
+    		if (POQTVc_PasteVECode(POQTr,true)) then begin end;
+    		POQTr.Location = RepSpec.FirstAcc;
+    		POQTr.TransDate = CurrentDate;
+    	end;
+    	rownr = 0;
+    	for (j=1;j<=rwcnt;j=j+1) begin
+    		if uVeArr[i]==VECodeArr[j] then begin
+    		  if uVeArr[i]=="" then begin
+    	    	SMrw.ArtCode = ItemArr[j];
+            SMrw.Quant = QtyArr[j];
+            SMrw.OrdQuant = QtyArr[j];
+            SMrw.FrPosCode = defpos;
+            MatRowPut(SMr,rownr,SMrw);
+            if (StockMovVc_PasteArtCode(SMr,rownr,1,wdr)) then begin end;
+            res = StockMovVc_PasteQuant(SMr,rownr);
+            rownr = rownr + 1;
+    	    end else begin
+            POQTrw.ArtCode = ItemArr[j];
+            POQTrw.Quant = QtyArr[j];
+            MatRowPut(POQTr,rownr,POQTrw);
+            if (POQTVc_PasteArtCode(POQTr,rownr,true)) then begin end;
+            if (POQTDchrsum(POQTr,rownr)) then begin end;
+            rownr = rownr + 1;
+    	    end;
+    	  end;
+    	end;
+    	if uVeArr[i]=="" then begin
+    		SMr.SerNr = -1;
+        scnt = scnt + 1;
+        SMrArr[scnt] = SMr;
+    	end else begin
+        POQTSumup(POQTr);
+        POQTr.SerNr = -1;
+        pcnt = pcnt + 1;
+        POQTrArr[pcnt] = POQTr;
+    	end;
+    end;
+  end;
+L99:;
+  EndJob;
+  return;
+end;

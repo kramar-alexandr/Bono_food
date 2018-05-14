@@ -1,0 +1,42 @@
+
+global
+function LongInt SalesForecastVcRecordCheck(var record SalesForecastVc SalesForecastr,record SalesForecastVc SalesForecast2r,LongInt stat,LongInt long4)
+BEGIN
+  LongInt res;
+  row SalesForecastVc SalesForecastrw;
+  integer i,rwc;
+
+  rwc = MatRowCnt(SalesForecastr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SalesForecastr,i,SalesForecastrw);
+    if nonblankdate(SalesForecastrw.RowDate) then begin
+      if SalesForecastrw.RowDate > SalesForecastr.EndDate then begin
+        RecordCheckError(1100029,"",i,"RowDate");
+        res = -1;
+        goto LSalesForecastVcRecordCheck;
+      end;
+      if SalesForecastrw.RowDate < SalesForecastr.StartDate then begin
+        RecordCheckError(1100029,"",i,"RowDate");
+        res = -1;
+        goto LSalesForecastVcRecordCheck;
+      end;
+    end;
+  end;
+
+  res = inner.SalesForecastVcRecordCheck(SalesForecastr,SalesForecast2r,stat,long4);
+LSalesForecastVcRecordCheck:;
+  SalesForecastVcRecordCheck = res;
+  return;
+end;
+
+global
+function LongInt SalesForecastVcRecordDefaults(var record SalesForecastVc SalesForecastr,record SalesForecastVc SalesForecast2r,LongInt stat,LongInt long4)
+BEGIN
+  LongInt res;
+
+  res = inner.SalesForecastVcRecordDefaults(SalesForecastr,SalesForecast2r,stat,long4);
+  SalesForecastr.RowType = 1;
+
+  SalesForecastVcRecordDefaults = res;
+  RETURN;
+END;

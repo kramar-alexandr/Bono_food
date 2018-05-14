@@ -1,0 +1,70 @@
+external procedure BLT_ExportEDIInvoices(string,string,longint,date,date,boolean,boolean,boolean);
+
+global
+procedure BLT_EDISyncVClassReportDefaults(Integer wn)
+begin
+  record RcVc RepSpec;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"BLT_EDISyncVClass");
+  RepSpec.flags[0] = 1;
+  Putwindowrecord(wn,RepSpec);
+
+return;
+end;
+
+global updating
+procedure BLT_UpdateInvoiceEDIFlag(longint invnr)
+begin
+  record IVVc IVr,oldIVr;
+
+  IVr.SerNr = invnr;
+  if ReadFirstMain(IVr,1,true) then begin
+    if IVr.SentToEDI == 0 then begin
+      RecordCopy(oldIVr,IVr);
+      IVr.SentToEDI = 1;
+      if RecordUpdate(oldIVr,IVr,true)!=0 then begin
+        LogText(0,"BLT_UpdateInvoiceEDIFlag ERROR :: Could not update invoice " & IVr.SerNr);
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+global updating
+procedure BLT_EDISyncMn(Record RcVc RepSpec)
+Begin
+  record InvBalXMLExpFolBlock InvBalXMLExpFolBlockr;
+  record BLT_EDISetBlock BLT_EDISetBl;
+  string 255 toFolder;
+
+  BlockLoad(InvBalXMLExpFolBlockr);
+  BlockLoad(BLT_EDISetBl);
+
+	if blank(InvBalXMLExpFolBlockr.DefSendILN) then begin
+		LogText(1100012,"");
+  	goto LBLT_EDISyncMn;
+	end;
+	if blank(InvBalXMLExpFolBlockr.DefSendCustCode) then begin
+		LogText(1100013,"");
+  	goto LBLT_EDISyncMn;
+	end;
+
+	if blank(BLT_EDISetBl.ExpFolder) then begin
+		LogText(1100016,"");
+  	goto LBLT_EDISyncMn;
+	end;
+
+	toFolder = BLT_EDISetBl.ExpFolder;
+	if (Right(toFolder,1) != chr(92)) then begin
+		toFolder = toFolder & chr(92);
+	end;
+
+  SetFileOnServer(true);
+  BLT_ExportEDIInvoices(toFolder, "", RepSpec.long1, RepSpec.sStartDate, RepSpec.sEndDate, true, true, RepSpec.flags[0]==1);
+  SetFileOnServer(false);
+LBLT_EDISyncMn:;
+return;
+end;

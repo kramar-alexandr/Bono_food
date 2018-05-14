@@ -1,0 +1,13 @@
+external procedure LaunchEdiAutoImportTasks(boolean, record BLT_EDISetBlock);
+
+global
+updating function LongInt BLT_EDISetBlockCheck(var record BLT_EDISetBlock BLT_EDISetr,record BLT_EDISetBlock BLT_EDISet2r,LongInt stat,LongInt long4)
+BEGIN
+  LongInt res;
+
+  res = 0;
+  LaunchEdiAutoImportTasks(True, BLT_EDISetr);
+
+  BLT_EDISetBlockCheck = res;
+  return;
+end;

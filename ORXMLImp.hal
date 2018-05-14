@@ -1,0 +1,400 @@
+external inner procedure GetAreaFromFile(area,string);
+external inner function boolean IsNumeric(string);
+remote inner function Boolean ORVc_PasteArtCode(var record ORVc,Integer,var string,var string,Boolean);
+remote inner function Boolean PasteCustInOrder(var record ORVc,string,string,var string,var string);
+remote inner procedure ORVc_PasteCurncyCode(var record ORVc,string);
+external inner function roundmode SetRoundModeD(Integer);
+remote inner procedure ORSumup(var record ORVc);
+external inner function Boolean ORDchrsum(var record ORVc,Integer);
+remote inner procedure ORVc_PasteQuant(var record ORVc,Integer,Boolean,var Boolean);
+external inner procedure ORDchsum(var record ORVc,Integer);
+external inner procedure SetDelAddr(string,string,var string,var string,var string,var string,var string,var string,var string,var string,var string,var string,var Integer,var string);
+external inner procedure ORVc_PasteRegion(var record ORVc,string);
+external inner function string 20 FindCustRoute(string,string,string);
+external inner procedure ORVc_PasteLocation(var record ORVc,Integer);
+external inner function string 60 AddObjectToObjectList(string,string);
+external inner procedure ORVc_GetPriceList2(var record ORVc,Boolean);
+
+function date CheckAndConvertDate(var string impstr)
+begin
+  date td;
+	string 255 temp;
+
+	temp = impstr;
+	if (IsNumeric(Left(temp,4))) then begin
+		// day
+    td.day = StringToInt(Right(temp,2));
+		temp = Left(temp,7);
+		// month
+    td.month = StringToInt(Right(temp,2));
+		temp = Left(temp,4);
+		// year
+		td.year = StringToInt(temp);
+	end else begin
+		td = CurrentDate;
+	end;
+
+  CheckAndConvertDate = td;
+	return;
+end;
+
+updating procedure ORXMLImpErrorLoging(longint sernr,string error)
+begin
+	record ORXMLImpErrorVc ORXMLImpErrorr;
+	boolean wLoop,found;
+
+	found = false;
+	// wLoop = true;
+	// ResetLoop(ORXMLImpErrorr);
+	// ORXMLImpErrorr.ORSerNr = sernr;
+	// while LoopKey("ORSerNr",ORXMLImpErrorr,1,wLoop) begin
+	// 	if (ORXMLImpErrorr.ORSerNr != sernr) then begin
+	// 		wLoop = false;
+	// 	end;
+	// 	if (wLoop) then begin
+	// 		if (ORXMLImpErrorr.Comment == error) then begin
+	// 			found = true;
+	// 			wLoop = false;
+	// 		end;
+	// 	end;
+	// end;
+
+	if !(found) then begin
+		RecordNew(ORXMLImpErrorr);
+		ORXMLImpErrorr.TransDate = CurrentDate;
+		ORXMLImpErrorr.TransTime = CurrentTime;
+		ORXMLImpErrorr.Comment = error;
+		ORXMLImpErrorr.ORSerNr = sernr;
+		ORXMLImpErrorr.SerNr = NextSerNr("ORXMLImpErrorVc",ORXMLImpErrorr.TransDate,-1,false,"");
+
+		if RecordStore(ORXMLImpErrorr,false) then begin end;
+	end;
+
+	return;
+end;
+
+global updating
+function boolean EDI_ImportOneFile(string filename)
+begin
+	area inputData;
+  xml xData;
+  string 255 tstr,curPath,tempPath;
+	integer i,j,cnt,rwcnt,rownr,rwc;
+  boolean testf,arterrors;
+  record ORVc ORr,saveORr,tmpORr;
+  row ORVc ORrw;
+  record AddORItemBlock AddORItemr;
+  row AddORItemBlock AddORItemrw;
+  record ORXMLImpCUBlock ORXMLImpCUBlockr;
+  row ORXMLImpCUBlock ORXMLImpCUBlockrw;
+  record ORXMLImpArtGBlock ORXMLImpArtGBlockr;
+  row ORXMLImpArtGBlock ORXMLImpArtGBlockrw;
+	record BLT_EDISetBlock BLT_EDISetr;
+  record INVc INr;
+  record PlanDeliveryBlock PlanDelRec;
+  LongInt newnr,week;
+  string 255 warning,errstr,inwarning;
+  record DelAddrVc DelAddrr;
+  boolean chsum,res;
+  record ModuleBlock OptFeature;
+  string 255 name,a0,a1,a2,a3,a4,region,oldregion,taxtemplatecode,itemtaxtemplatecode,vatcode,country;
+  val quant,coef;
+  date d;
+
+	BlockLoad(ORXMLImpCUBlockr);
+	BlockLoad(ORXMLImpArtGBlockr);
+	BlockLoad(OptFeature);
+	BlockLoad(BLT_EDISetr);
+  BlockLoad(PlanDelRec);
+  BlockLoad(AddORItemr);
+  res = true;
+
+	if (SetImportCodepage("CP1257")) then begin end;
+
+  // strings are only 255 symbols long, so need to get file in bigger byte variable "area"
+  // GetAreaFromFile(inputData,filename);
+  // xData = ParseXMLArea(inputData);
+  xData = ParseXmlFile(filename);
+
+  if (XmlNodeExists(xData,"Document-Order")) then begin
+  	RecordNew(ORr);
+
+  	// HEADER
+  	curPath = "Document-Order/Order-Header";
+
+  	tempPath = curPath & "/OrderDate";
+  	if (XmlNodeExists(xData,tempPath)) then begin
+  		tstr = XMLGet(xData,tempPath);
+  		ORr.OrdDate = CheckAndConvertDate(tstr);
+	    ORr.SerNr = NextSerNr("ORVc",ORr.OrdDate,newnr,false,BLT_EDISetr.SerComment);
+	    if (ORr.SerNr == -1) then begin
+	    	ORXMLImpErrorLoging(ORr.SerNr,USetStr(1100011));
+        res = false;
+	    	goto StopImport;
+	    end;
+  	end;
+  	tempPath = curPath & "/OrderNumber";
+  	if (XmlNodeExists(xData,tempPath)) then begin
+  		tmpORr.CustOrdNr = XMLGet(xData,tempPath);
+  		if ReadFirstKey("CustOrdNr",tmpORr,1,true) begin
+	    	ORXMLImpErrorLoging(ORr.SerNr,USetStr(1100017) & " (" & tmpORr.CustOrdNr & ")");
+        res = false;
+  			goto StopImport;
+  		end;
+  		ORr.CustOrdNr = XMLGet(xData,tempPath);
+  	end;
+
+  	tempPath = curPath & "/OrderCurrency";
+  	if (XmlNodeExists(xData,tempPath)) then begin
+  		ORr.CurncyCode = XMLGet(xData,tempPath);
+	    ORVc_PasteCurncyCode(ORr,"");
+  	end;
+
+  	curPath = "Document-Order/Order-Parties";
+  	tempPath = curPath & "/Buyer/ILN";
+  	if (XmlNodeExists(xData,tempPath)) then begin
+  		tstr = XMLGet(xData,tempPath);
+  		if nonblank(tstr) then begin
+  			rwcnt = MatRowCnt(ORXMLImpCUBlockr);
+  			for (i=0;i<rwcnt;i=i+1) begin
+  				MatRowGet(ORXMLImpCUBlockr,i,ORXMLImpCUBlockrw);
+  				if (ORXMLImpCUBlockrw.ImpCustCode == tstr) then begin
+  					ORr.CustCode = ORXMLImpCUBlockrw.CustCode;
+  					if (PasteCustInOrder(ORr,ORr.CustCode,"",warning,errstr)) then begin end;
+  					i = rwcnt + 1;
+  				end;
+  			end;
+  		end;
+  	end;
+  	if blank(ORr.CustCode) then begin
+  		ORXMLImpErrorLoging(ORr.SerNr,USetStr(1100018) & tstr);
+      res = false;
+	    goto StopImport;
+  	end;
+
+  	curPath = "Document-Order/Order-Parties";
+  	tempPath = curPath & "/DeliveryPoint/ILN";
+  	if (XmlNodeExists(xData,tempPath)) then begin
+  		tstr = XMLGet(xData,tempPath);
+  		if nonblank(tstr) then begin
+  			DelAddrr.DelCode = tstr;
+  			if ReadFirstMain(DelAddrr,1,true) then begin
+  				ORr.DelAddrCode = DelAddrr.DelCode;
+
+  				oldregion = ORr.Region;
+				  SetDelAddr(ORr.CustCode,ORr.DelAddrCode,name,a0,a1,a2,a3,a4,country,region,taxtemplatecode,vatcode,ORr.ExportFlag,ORr.DelRecipientGLN);
+				  ORr.ShipAddr0 = name;
+				  ORr.ShipAddr1 = a0;
+				  ORr.ShipAddr2 = a1;
+				  ORr.ShipAddr3 = a2;
+				  ORr.DelAddr3 = a3;
+				  ORr.DelAddr4 = a4;
+				  ORr.Region = region;
+				  ORr.CustTaxTemplateCode = taxtemplatecode;
+				  ORVc_PasteRegion(ORr,oldregion);
+				  ORr.Sorting = FindCustRoute(ORr.CustCode,ORr.Location,ORr.DelAddrCode);
+          ORr.Objects = AddObjectToObjectList(ORr.Objects,DelAddrr.Objects);
+          ORr.Location = DelAddrr.DefaultLocation;
+          ORVc_PasteLocation(ORr,-1);
+  			end;
+  		end;
+  	end;
+  	if blank(ORr.DelAddrCode) then begin
+  		ORXMLImpErrorLoging(ORr.SerNr,USetStr(1100019) & tstr);
+      res = false;
+	    goto StopImport;
+  	end;
+
+		if nonblank(BLT_EDISetr.OrderClass) then begin
+			ORr.OrderClass = BLT_EDISetr.OrderClass;
+		end;
+
+    tempPath = "Document-Order/Order-Header/ExpectedDeliveryDate";
+    tstr = XmlGet(xData,tempPath);
+    if nonblank(tstr) then begin
+      ORr.PlanShip = CheckAndConvertDate(tstr);
+      ORr.PlanShipDate = StringToDate(ORr.PlanShip);
+      ORVc_GetPriceList2(ORr,false);
+    end;
+
+  	// ROWS
+  	arterrors = false;
+	  i = 0;
+	  curPath = "Document-Order/Order-Lines";
+	  tempPath = curPath & "/Line";
+		while (XMLNodeExists(xData,tempPath & "[" & i & "]")) begin
+			// ja rindas = 198, tad taisam kopiju -> dzesham rindas -> veidojam nakamo
+			// if (MatRowCnt(ORr)>197) then begin
+      if false then begin //EBS disabled for now
+				RecordClear(saveORr);
+				RecordCopy(saveORr,ORr);
+
+				if (saveORr.SerNr != -1) then begin
+    			if (MatRowCnt(saveORr)>0) then begin
+    				if (arterrors) then begin
+							ORXMLImpErrorLoging(ORr.SerNr,USetStr(1100020));
+              res = false;
+						end;
+    				ORSumup(saveORr);
+			  		if RecordStore(saveORr,false) then begin
+						end;
+  				end;
+    		end;
+
+    		// delete all rows
+    		rwcnt = MatRowCnt(ORr);
+				for (j=0;j<rwcnt;j=j+1) begin
+					MatRowDelete(ORr,0);
+				end;
+
+				// need new ser nr
+				ORr.SerNr = NextSerNr("ORVc",ORr.OrdDate,newnr,false,"");
+		    if (ORr.SerNr == -1) then begin
+		    	ORXMLImpErrorLoging(ORr.SerNr,USetStr(1100011));
+          res = false;
+		    	goto StopImport;
+		    end;
+		    arterrors = false;
+			end;
+
+			ClearRow(ORr,ORrw,1);
+			testf = false;
+
+      // Item matching works in two steps first we need to look for
+      // item code matching SupplierItemCode if it is not found then
+      // we look for EAN in item card barcode field
+      tstr = XMLGet(xData,tempPath & "[" & i & "]/Line-Item/SupplierItemCode");
+      INr.Code = tstr;
+      testf = ReadFirstMain(INr,1,true);
+      if !testf then begin
+        tstr = XMLGet(xData,tempPath & "[" & i & "]/Line-Item/EAN");
+        INr.BarCode = tstr;
+        testf = ReadFirstKey("BarCode",INr,1,true);
+      end;
+
+      if (testf) then begin
+      	testf = false;
+      	rwcnt = MatRowCnt(ORXMLImpArtGBlockr);
+  			for (j=0;j<rwcnt;j=j+1) begin
+  				MatRowGet(ORXMLImpArtGBlockr,j,ORXMLImpArtGBlockrw);
+  				if (ORXMLImpArtGBlockrw.ArtGroup == INr.Group) then begin
+  					testf = true;
+  					j = rwcnt + 1;
+  				end;
+  			end;
+      	if (testf) then begin
+		    	ORrw.ArtCode = INr.Code;
+		    	MatRowInsert(ORr,MatRowCnt(ORr),ORrw);
+		    	if (ORVc_PasteArtCode(ORr,MatRowCnt(ORr)-1,inwarning,warning,false)) then begin end;
+					MatRowGet(ORr,MatRowCnt(ORr)-1,ORrw);
+
+          tstr = XMLGet(xData,tempPath & "[" & i & "]/Line-Item/ExpirationDate");
+          if nonblank(tstr) then begin
+            ORrw.MinBestBefore = CheckAndConvertDate(tstr);
+          end else begin
+            ORrw.MinBestBefore = "";
+          end;
+
+          tstr = XMLGet(xData,tempPath & "[" & i & "]/Line-Item/MaxExpirationDate");
+          if nonblank(tstr) then begin
+            ORrw.MaxBestBefore = CheckAndConvertDate(tstr);
+          end else begin
+            ORrw.MaxBestBefore = "";
+          end;
+
+					tstr = XMLGet(xData,tempPath & "[" & i & "]/Line-Item/OrderedQuantity");
+          quant = Round(StringToVal(tstr,M423Val),SetRoundModeD(3));
+
+          tstr = XMLGet(xData,tempPath & "[" & i & "]/Line-Item/OrderedUnitPacksize");
+          coef = blankval;
+          if nonblank(tstr) then begin
+            coef = StringToVal(tstr,M423Val);
+          end;
+
+          if coef>0 then begin
+            quant = Round(quant * coef, SetRoundModeD(3));
+          end;
+
+					ORrw.Quant = quant;
+					MatRowPut(ORr,MatRowCnt(ORr)-1,ORrw);
+					if (OptFeature.NoQtyDepPrices==0) then begin
+			      ORVc_PasteQuant(ORr,MatRowCnt(ORr)-1,false,chsum);
+			    end else begin
+			      chsum = ORDchrsum(ORr,MatRowCnt(ORr)-1);
+			    end;
+			    if (chsum) then begin
+			      ORDchsum(ORr,MatRowCnt(ORr)-1);
+			    end;
+			  end else begin
+  				arterrors = true;
+  			end;
+			end else begin
+				tstr = XMLGet(xData,tempPath & "[" & i & "]/Line-Item/SupplierItemCode");
+				ORrw.ArtCode = tstr;
+	    	MatRowInsert(ORr,MatRowCnt(ORr),ORrw);
+	    	arterrors = true;
+			end;
+
+		  i = i + 1;
+		end;
+
+		if (ORr.SerNr != -1) then begin
+			if (MatRowCnt(ORr)>0) then begin
+				if (arterrors) then begin
+					ORXMLImpErrorLoging(ORr.SerNr,USetStr(1100020));
+          res = false;
+				end;
+        rwc = MatRowCnt(AddORItemr);
+        for(i=0;i<rwc;i=i+1)begin
+          MatRowGet(AddORItemr,i,AddORItemrw);
+          if nonblank(AddORItemrw.ItemCode) then begin
+            ClearRow(ORr,ORrw,1);
+            rownr = MatRowCnt(ORr);
+            ORrw.ArtCode = AddORItemrw.ItemCode;
+            MatRowPut(ORr,rownr,ORrw);
+            if (ORVc_PasteArtCode(ORr,rownr,inwarning,warning,false)) then begin end;
+            MatRowGet(ORr,rownr,ORrw);
+
+            ORrw.Quant = AddORItemrw.Quant;
+            MatRowPut(ORr,rownr,ORrw);
+            if (OptFeature.NoQtyDepPrices==0) then begin
+  			      ORVc_PasteQuant(ORr,rownr,false,chsum);
+  			    end else begin
+  			      chsum = ORDchrsum(ORr,rownr);
+  			    end;
+  			    if (chsum) then begin
+  			      ORDchsum(ORr,rownr);
+  			    end;
+          end;
+        end;
+
+				ORSumup(ORr);
+	  		if RecordStore(ORr,false) then begin
+				end;
+			end;
+		end;
+  end;
+
+StopImport:;
+  CloseFile;
+  EDI_ImportOneFile = res;
+	return;
+end;
+
+global
+updating procedure ORXMLImpIn()
+begin
+  string 255 filename;
+
+  SetFileOnServer(true);
+	CloseFile;
+
+  filename = GetImportFileName;
+  EDI_ImportOneFile(filename);
+
+  UpdateBrowses("ORVc");
+  UpdateBrowses("ORXMLImpErrorVc");
+  SetFileOnServer(false);
+
+  return;
+end;

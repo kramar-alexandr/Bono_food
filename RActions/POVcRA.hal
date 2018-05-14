@@ -1,0 +1,34 @@
+external function boolean BLT_ExportEDI_POVc(var record POVc);
+
+global
+updating function LongInt POVcRecordSave(var record POVc POr,record POVc PO2r,LongInt stat,LongInt long4)
+begin
+  LongInt res;
+
+  res = inner.POVcRecordSave(POr,PO2r,stat,long4);
+
+  if (POr.OKFlag==1) then begin
+    if POr.BLT_SentToLogistics==0 then begin
+      BLT_ExportEDI_POVc(POr);
+    end;
+  end;
+  POVcRecordSave = res;
+  return;
+end;
+
+global
+updating function LongInt POVcRecordUpdate(var record POVc POr,record POVc PO2r,LongInt stat,LongInt long4)
+begin
+  LongInt res;
+
+  res = inner.POVcRecordUpdate(POr,PO2r,stat,long4);
+
+  if (POr.OKFlag==1) and (PO2r.OKFlag==0) then begin
+    if POr.BLT_SentToLogistics==0 then begin
+      BLT_ExportEDI_POVc(POr);
+    end;
+  end;
+
+  POVcRecordUpdate = res;
+  return;
+end;

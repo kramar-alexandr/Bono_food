@@ -1,0 +1,29 @@
+external procedure LaunchEdiAutoImportTasks(boolean, record BLT_EDISetBlock);
+
+global
+updating procedure OnApplicationStartupComplete()
+begin
+  record BLT_EDISetBlock BLT_EDISetr;
+  record CompaniesBlock Cb;
+  row CompaniesBlock Cbrw;
+  Integer i,rwcnt,oldcomp;
+
+  inner.OnApplicationStartupComplete;
+
+  // start EDI auto import tasks for each company
+  if (ServerMode or SingleUserMode) then begin
+    oldcomp = CurrentCompany;
+    BlockLoad(Cb);
+    rwcnt = MatRowCnt(Cb);
+    for (i=0;i<rwcnt;i=i+1) begin
+      MatRowGet(Cb,i,Cbrw);
+      if (SetServerCompanyCode(Cbrw.CompCode)) then begin
+        BlockLoad(BLT_EDISetr);
+        LaunchEdiAutoImportTasks(false, BLT_EDISetr);
+      end;
+    end;
+    ResetCompany(oldcomp);
+  end;
+
+  return;
+end;

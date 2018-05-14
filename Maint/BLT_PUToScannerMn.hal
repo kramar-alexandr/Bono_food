@@ -1,0 +1,153 @@
+external inner procedure ExportXmlNL(string);
+external inner procedure ExportXmlTagOpen(string);
+external inner procedure ExportXmlTagClose(string);
+external inner function string 255 ConvertXmlString(string,Boolean);
+
+global
+function Boolean BLT_CreateExpFile(string fname,string path)
+begin
+  Boolean res;
+  string 255 filename;
+
+  res = true;
+  if (nonblank(path)) then begin
+    filename = path;
+    if (Right(filename,1)!="/") and (Right(filename,1)!="\\") then begin
+      filename = filename & "/";
+    end;
+  end;
+  filename = filename & fname;
+  CreateFile(filename);
+  CloseFile;
+
+  BLT_CreateExpFile = res;
+  return;
+end;
+
+updating
+procedure ExportOnePUVc(var record PUVc PUr)
+begin
+  record PUVc oldPUr;
+  row PUVc PUrw;
+  integer i,rwc;
+
+  ExportXmlTagOpen("<delivery>");
+  ExportXmlNL("<id>" & PUr.SerNr & "</id>");
+  ExportXmlNL("<supplier_id>" & PUr.VECode & "</supplier_id>");
+  ExportXmlNL("<supplier_name>" & ConvertXmlString(PUr.VEName,false) & "</supplier_name>");
+  ExportXmlNL("<order_date>" & DateToString(CurrentDate,"YYYY-MM-DD") & "</order_date>");
+  ExportXmlTagOpen("<product_list>");
+  rwc = MatRowCnt(PUr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(PUr,i,PUrw);
+    if nonblank(PUrw.ArtCode) then begin
+      ExportXmlTagOpen("<product_listitem>");
+      ExportXmlNL("<product_id>" & PUrw.ArtCode & "</product_id>");
+      ExportXmlNL("<quantity>" & ValToString(PUrw.Quant,M45Val,"",".",0) & "</quantity>");
+      ExportXmlTagClose("</product_listitem>");
+    end;
+  end;
+
+  ExportXmlTagClose("</product_list>");
+  ExportXmlTagClose("</delivery>");
+
+  if PUr.BLT_Exportf==0 then begin
+    RecordCopy(oldPUr,PUr);
+    PUr.BLT_Exportf = 1;
+    if RecordUpdate(oldPUr,PUr,true)!=0 then begin
+      LogText(0,"ExprotOnePUVc ERROR :: Could not update PUVc record " & PUr.SerNr);
+    end;
+  end;
+
+  return;
+end;
+
+updating
+procedure ExportPUVc(record RcVc RepSpec)
+begin
+  record PUVc PUr;
+  boolean wloop,testf;
+
+  SetExportCodePage("UTF-8");
+  ExportXmlNL("<?xml version=\"1.0\"?>");
+  ExportXmlTagOpen("<root>");
+  ExportXmlTagOpen("<deliveries_list>");
+
+  wloop = true;
+  PUr.TransDate = RepSpec.sStartDate;
+  While LoopKey("TransDate",PUr,1,wloop) begin
+    if PUr.TransDate > RepSpec.sEndDate then begin
+      wloop = false;
+    end else begin
+      testf = true;
+      if RepSpec.long1!=-1 and PUr.SerNr!=RepSpec.long1 then begin
+        testf = false;
+      end;
+      if PUr.BLT_Exportf==1 and RepSpec.flags[0]==0 then begin
+        testf = false;
+      end;
+      if PUr.BLT_Exportf==0 and RepSpec.flags[1]==0 then begin
+        testf = false;
+      end;
+      if testf then begin
+        if MatRowCnt(PUr)==0 then begin
+          testf = false;
+        end;
+      end;
+      if testf then begin
+        ExportOnePUVc(PUr);
+      end;
+    end;
+  end;
+
+  ExportXmlTagClose("</deliveries_list>");
+  ExportXmlTagClose("</root>");
+
+  return;
+end;
+
+global updating
+procedure BLT_PUToScannerMn(Record RcVc RepSpec)
+Begin
+  record BLT_ScannerSetBlock BLT_ScannerSetbl;
+  string 255 filename,tmpfile;
+
+  BlockLoad(BLT_ScannerSetbl);
+
+  if blank(BLT_ScannerSetbl.PUExpFolder) then begin
+    LogText(0,"BLT_PUToScannerMn ERROR :: Blank export folder, please check settings!");
+    GoTo LBLT_PUToScannerMn;
+  end;
+
+  if blank(BLT_ScannerSetbl.PUFileName) then begin
+    LogText(0,"BLT_PUToScannerMn ERROR :: Blank export file name, please check settings!");
+    GoTo LBLT_PUToScannerMn;
+  end;
+
+  SetFileOnServer(true); //thsi is needed for win server
+  filename = BLT_ScannerSetbl.PUFileName;
+  tmpfile = "tmp/" & filename;
+
+  if FileExists(tmpfile) then begin
+    Delete_File(tmpfile);
+  end;
+
+  //Create export file
+  BLT_CreateExpFile(filename,"tmp");
+
+  //Open export file
+  OpenExportFile(tmpfile, true);
+
+  //Export PUVc records
+  ExportPUVc(RepSpec);
+
+  //Close file
+  CloseFile;
+
+  //Move file
+  MoveFile(filename,"tmp",BLT_ScannerSetbl.PUExpFolder);
+  SetFileOnServer(false);
+
+LBLT_PUToScannerMn:;
+return;
+end;

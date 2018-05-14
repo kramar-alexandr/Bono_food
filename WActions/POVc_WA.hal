@@ -1,0 +1,43 @@
+remote procedure POVc_PasteQuant2(var record POVc,Integer);
+remote procedure POVc_GetPlanDeliveryDate(var record POVc);
+
+function Boolean PODClassQuant2EFAfter(Integer wn,Integer rownr,Boolean changedf)
+BEGIN
+  record POVc POr;
+
+  if (changedf) then begin
+    GetWindowRecord(wn,POr);
+    POVc_PasteQuant2(POr,rownr);
+    PutWindowRecord(wn,POr);
+  end;
+  PODClassQuant2EFAfter = true;
+  return;
+end;
+
+function Boolean BLT_PastePlanDeliveryDate(Integer wn,Integer rownr,Boolean changedf)
+BEGIN
+  record POVc POr;
+
+  if (changedf) and (rownr==0) then begin
+    GetWindowRecord(wn,POr);
+    POVc_GetPlanDeliveryDate(POr);
+    PutWindowRecord(wn,POr);
+  end;
+  BLT_PastePlanDeliveryDate = true;
+  return;
+end;
+
+global
+function Boolean PODClassAfterEditField(Integer wn,string fieldname,Integer fn, Integer rownr,Integer changed)
+BEGIN
+  Boolean res;
+
+  res = inner.PODClassAfterEditField(wn,fieldname,fn,rownr,changed);
+
+  switch (fieldname) begin
+    case "Quant2": res = PODClassQuant2EFAfter(wn,rownr,changed!=0);
+    case "ArtCode": BLT_PastePlanDeliveryDate(wn,rownr,changed!=0)
+  end;
+
+  return;
+end;

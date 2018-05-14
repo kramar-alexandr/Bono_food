@@ -1,0 +1,78 @@
+external inner function Boolean ReadFirstItem(string,var record INVc,Boolean,Boolean);
+external function boolean ChecPIVcBestBeforeDays(string,string,date,date);
+
+global
+updating function LongInt PUVcRecordCheck(var record PUVc PUr,record PUVc PU2r,LongInt stat,LongInt check)
+begin
+  LongInt res;
+  boolean testf;
+  record INVc INr;
+  row PUVc PUrw;
+  integer i,rwc;
+
+  testf = true;
+  if (stat==Rs_update) then begin
+    if (PU2r.OKFlag!=0) then begin
+      testf = false;
+    end;
+  end;
+
+  if testf then begin
+    rwc = MatRowCnt(PUr);
+    for(i=0;i<rwc;i=i+1)begin
+      MatRowGet(PUr,i,PUrw);
+      if PUrw.stp==1 and nonblank(PUrw.ArtCode) then begin
+        if ReadFirstItem(PUrw.ArtCode,INr,true,true) then begin
+          if INr.EBS_ReqBestBefore==1 and INr.SerNrf==2 and blankdate(PUrw.BestBefore) then begin
+            RecordCheckError(1058,"",i,"BestBefore");
+            res = -1;
+            goto LPUVcRecordCheck;
+          end;
+          if !ChecPIVcBestBeforeDays(PUr.VECode, PUrw.ArtCode, PUr.TransDate, PUrw.BestBefore) then begin
+            RecordCheckError(1100034,"",i,"BestBefore");
+            res = -1;
+            goto LPUVcRecordCheck;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  res = inner.PUVcRecordCheck(PUr,PU2r,stat,check);
+
+LPUVcRecordCheck:;
+  PUVcRecordCheck = res;
+  return;
+end;
+
+global updating
+function LongInt PUVcRecordSave(Var Record PUVc PUr, Record PUVc PU2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.PUVcRecordSave(PUr,PU2r,stat,check);
+
+  if (PUr.OKFlag!=0) then begin
+    PUr.BLT_Importf = 1;
+    PUr.BLT_Exportf = 1;
+  end;
+
+  PUVcRecordSave = res;
+  return;
+end;
+
+global updating
+function LongInt PUVcRecordUpdate(Var Record PUVc PUr, Record PUVc PU2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.PUVcRecordUpdate(PUr,PU2r,stat,check);
+
+  if ((PUr.OKFlag!=0) and (PU2r.OKFlag==0)) then begin
+    PUr.BLT_Importf = 1;
+    PUr.BLT_Exportf = 1;
+  end;
+
+  PUVcRecordUpdate = res;
+  return;
+end;

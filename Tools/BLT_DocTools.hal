@@ -1,0 +1,351 @@
+external inner procedure GetLangNr(string,var record LangNrVc);
+external inner function Boolean GetItemNameStr(Integer,var string,string,string,string);
+external inner procedure PrintValue(string,val,Integer,record LangNrVc,record SysFormatBlock,Boolean);
+external inner function RoundMode SetRoundModeD(integer);
+external inner function Boolean ReadFirstItem(string,var record INVc,Boolean,Boolean);
+external inner procedure M4PadString(string,Integer,string,Boolean,var string);
+external inner procedure BCEAN(string,var string);
+external inner procedure GetUserName(String,var String);
+
+function Integer cval(string t,Integer pos)
+BEGIN
+  Integer res;
+
+  res =  asc(Mid(t,pos-1,1)) - asc("0");
+  cval = res;
+  RETURN;
+END;
+
+global
+procedure BLT_ProdOrderFields(record ProdVc Prodr,record LangNrVc LangNrr,record SysFormatBlock SFr)
+begin
+  record INVc INr;
+  row ProdVc Prodrw;
+  boolean foundf;
+  integer i,rwc;
+  LongInt sm,a,b;
+  string 13 tstr,tstr2;
+  val t;
+
+  //These fields have nothing to do with out item
+  OutFormField("FF_NetoWeight",Prodr.NetoWeight);
+
+  //Find row with outqty, first is fine, because more than one should not be
+  rwc = MatRowCnt(Prodr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(Prodr,i,Prodrw);
+    if Prodrw.OutQty>0 then begin
+      foundf = true;
+      i = rwc;
+    end;
+  end;
+
+  //If there are no rows with outqty then these fields should not output anything
+  if !foundf then begin
+    GoTo LBLT_ProdOrderFields;
+  end;
+
+  if (ReadFirstItem(Prodrw.Item,INr,false,false)) then begin end;
+  OutFormField("FF_OutItemBarCode",INr.BarCode);
+  OutFormField("FF_OutItemSerialNr",Prodrw.SerialNr);
+  OutFormField("FF_OutItemBestBefore",Prodrw.BestBefore);
+  OutFormField("FF_OutItemUserStr1",INr.UserStr1);
+  OutFormField("FF_OutItemUserStr2",INr.UserStr2);
+  OutFormField("FF_OutItemUserStr3",INr.UserStr3);
+  OutFormField("FF_OutItemUserStr4",INr.UserStr4);
+  OutFormField("FF_OutItemUserStr5",INr.UserStr5);
+
+  tstr = "23";
+  if Prodr.NetoWeight>=10 then begin
+    tstr = "25";
+  end;
+
+  tstr = tstr & INr.BarCode;
+
+  if Prodr.NetoWeight>=10 then begin
+    t = Round(Prodr.NetoWeight,SetRoundModeD(2));
+  end else begin
+    t = Round(Prodr.NetoWeight,SetRoundModeD(3));
+  end;
+
+  tstr2 = ValToString(t,M45Val,"","",0);
+  tstr = tstr & Left(tstr2,4);
+
+  BCEAN(tstr,tstr2);
+  OutFormField("FF_BonasBarCode2",tstr2);
+
+  //Checksum
+  M4PadString(tstr,12,"0",true,tstr);
+  a = cval(tstr,1) + cval(tstr,3) + cval(tstr,5) + cval(tstr,7) + cval(tstr,9) + cval(tstr,11);
+  b = 3*(cval(tstr,2) + cval(tstr,4) + cval(tstr,6) + cval(tstr,8) + cval(tstr,10) + cval(tstr,12));
+  sm = 4000 - a- b;
+  sm = Mod(sm,10);
+  tstr = tstr & chr(sm + asc("0"));
+
+  OutFormField("FF_BonasBarCode",tstr);
+
+LBLT_ProdOrderFields:;
+  return;
+end;
+
+global
+procedure PrintBoxItemFields(record IVVc IVr,record LangNrVc LangNrr,record SysFormatBlock SFb)
+begin
+  record INVc INr;
+  record ProdSettingsBlock ProdSettingsr;
+  row IVVc IVrw;
+  integer i,rwc;
+  string 255 tstr;
+
+  BlockLoad(ProdSettingsr);
+
+  rwc = MatRowCnt(IVr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(IVr,i,IVrw);
+    if IVrw.stp==1 and nonblank(IVrw.ArtCode) then begin
+      if (ReadFirstItem(IVrw.ArtCode,INr,false,false)) then begin
+        if SetInSet(ProdSettingsr.BoxItemClass, INr.DispGroups) then begin
+          tstr = IVrw.Spec;
+          if (tstr==INr.Name) then begin
+            if (GetItemNameStr(1,tstr,IVr.LangCode,INr.Name,INr.Code)) then begin end;
+          end;
+          OutFormField("FF_BOXITEMDESC", tstr);
+          PrintValue("FF_PACKQTY",IVrw.Quant,M4UVal,LangNrr,SFb,false);
+          PrintValue("FF_PACKBRUTTOWEIGHT",IVrw.Quant * INr.Weight,M4UVal,LangNrr,SFb,false);
+        end;
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+procedure PrintItemsGroupedByItemGroup(record SHVc SHr,record LangNrVc LangNrr,record SysFormatBlock SFb)
+begin
+  record INVc INr;
+  record ITVc ITr;
+  record ProdSettingsBlock ProdSettingsr;
+  row SHVc SHrw;
+  integer i,rwc,a;
+  string 255 tstr;
+  array string 255 arr_groups, arr_group_names;
+  vector boolean vec_groupaddedf;
+  vector val vec_groupweights;
+
+  BlockLoad(ProdSettingsr);
+
+  rwc = MatRowCnt(SHr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SHr,i,SHrw);
+    if nonblank(SHrw.ArtCode) then begin
+      if (ReadFirstItem(SHrw.ArtCode,INr,false,false)) then begin
+        if !SetInSet(ProdSettingsr.BoxItemClass, INr.DispGroups) then begin
+            if !vec_groupaddedf[INr.Group] then begin
+              ITr.Code = INr.Group;
+              ReadFirstMain(ITr,1,true);
+              vec_groupaddedf[INr.Group] = true;
+              a = arr_groups.length;
+              arr_group_names[a] = ITr.Comment;
+              arr_groups[a] = INr.Group;
+            end;
+            vec_groupweights[INr.Group] = vec_groupweights[INr.Group] + SHrw.Ship * INr.Weight;
+        end;
+      end;
+    end;
+  end;
+
+  for (i=0;i<arr_groups.length;i=i+1) begin
+    OutFormField("FF_GROUPCODE", arr_groups[i]);
+    OutFormField("FF_GROUPNAME", arr_group_names[i]);
+    PrintValue("FF_GROUPWEIGHT",vec_groupweights[arr_groups[i]],M4UVal,LangNrr,SFb,false);
+  end;
+
+  return;
+end;
+
+procedure PrintBoxItemFields_SHVc(record SHVc SHr,record LangNrVc LangNrr,record SysFormatBlock SFb)
+begin
+  record INVc INr;
+  record ProdSettingsBlock ProdSettingsr;
+  row SHVc SHrw;
+  integer i,rwc,npk;
+  string 255 tstr;
+
+  BlockLoad(ProdSettingsr);
+
+  npk = 1;
+  rwc = MatRowCnt(SHr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SHr,i,SHrw);
+    if nonblank(SHrw.ArtCode) then begin
+      if (ReadFirstItem(SHrw.ArtCode,INr,false,false)) then begin
+        if SetInSet(ProdSettingsr.BoxItemClass, INr.DispGroups) then begin
+          tstr = SHrw.Spec;
+          if (tstr==INr.Name) then begin
+            if (GetItemNameStr(1,tstr,SHr.LangCode,INr.Name,INr.Code)) then begin end;
+          end;
+          OutFormField("FF_BOXITEMROWNR", npk);
+          OutFormField("FF_BOXITEMDESC", tstr);
+          OutFormField("FF_BOXITEMCODE", SHrw.ArtCode);
+          PrintValue("FF_PACKQTY",SHrw.Ship,M4UVal,LangNrr,SFb,false);
+          PrintValue("FF_PACKBRUTTOWEIGHT",SHrw.Ship * INr.Weight,M4UVal,LangNrr,SFb,false);
+          npk = npk + 1;
+        end;
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+procedure AddToResArrays(var array string arrResName, var array val arrTrans, var array val arrPrim, string resname, val trans, val prim)
+begin
+  integer l,i;
+  boolean foundf;
+
+  l = arrResName.length;
+  for (i=0;i<l;i=i+1) begin
+    if arrResName[i]==resname then begin
+      arrTrans[i] = arrTrans[i] + trans;
+      arrPrim[i] = arrPrim[i] + prim;
+      foundf = true;
+      i = l;
+    end;
+  end;
+
+  if !foundf then begin
+    arrResName[l] = resname;
+    arrTrans[l] = trans;
+    arrPrim[l] = prim;
+  end;
+
+  return;
+end;
+
+procedure PrintNaturalResourceMatrix(record SHVc SHr)
+begin
+  record NatResourceTypeVc NatResourceTyper;
+  record ItemResourceVc ItemResourcer;
+  row ItemResourceVc ItemResourcerw;
+  record ProdSettingsBlock ProdSettingsr;
+  record INVc INr;
+  integer i,rwc,i2,rwc2;
+  row SHVc SHrw;
+  boolean boxItemClassf;
+  array string 255 arrResName;
+  array val arrTrans,arrSec,arrPrim;
+  val totPrimary, totWeight, totTransport, totNetWeight;
+
+  BlockLoad(ProdSettingsr);
+
+  rwc = MatRowCnt(SHr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SHr,i,SHrw);
+    if nonblank(SHrw.ArtCode) then begin
+      boxItemClassf = False;
+      if (ReadFirstItem(SHrw.ArtCode,INr,false,false)) then begin
+        if SetInSet(ProdSettingsr.BoxItemClass, INr.DispGroups) then begin
+          boxItemClassf = True;
+        end;
+      end;
+
+      totNetWeight = totNetWeight + SHrw.Ship * INr.NetWeight;
+
+      ItemResourcer.ArtCode = SHrw.ArtCode;
+      if ReadFirstMain(ItemResourcer,1,true) then begin
+        rwc2 = MatRowCnt(ItemResourcer);
+        for(i2=0;i2<rwc2;i2=i2+1)begin
+          MatRowGet(ItemResourcer,i2,ItemResourcerw);
+          if nonblank(ItemResourcerw.ResourceType) then begin
+            if boxItemClassf then begin
+              AddToResArrays(arrResName, arrTrans, arrPrim, ItemResourcerw.ResourceType, SHrw.Ship * ItemResourcerw.Weight, blankval);
+              totTransport = totTransport + SHrw.Ship * ItemResourcerw.Weight;
+            end else begin
+              AddToResArrays(arrResName, arrTrans, arrPrim, ItemResourcerw.ResourceType, blankval, SHrw.Ship * ItemResourcerw.Weight);
+              totPrimary = totPrimary + SHrw.Ship * ItemResourcerw.Weight;
+            end;
+            totWeight = totWeight + SHrw.Ship * ItemResourcerw.Weight;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  for (i=0;i<arrResName.length;i=i+1) begin
+    NatResourceTyper.Code = arrResName[i];
+    ReadFirstMain(NatResourceTyper,1,true);
+    OutFormField("FF_NATRESNAME",NatResourceTyper.Comment);
+    OutFormField("FF_NATRESTRANS",arrTrans[i]);
+    OutFormField("FF_NATRESPRIM",arrPrim[i]);
+  end;
+
+  OutFormField("FF_NATRESTOTPRIM",totPrimary);
+  OutFormField("FF_NATRESTOTTRANS",totTransport);
+  OutFormField("FF_NATRESTOTWEIGHT",totWeight);
+  OutFormField("FF_TOTNETWEIGHT",totNetWeight);
+
+  return;
+end;
+
+global
+procedure EBS_PrintSHFormFields(record SHVc SHr)
+begin
+  record ORVc ORr;
+  record IVVc IVr, lastIVr;
+  record CUVc CUr;
+  boolean wloop;
+  longint ivnr;
+  date lastinvdate;
+  string 255 tstr;
+  record SysFormatBlock SFb;
+  record LangNrVc LangNrr;
+
+  GetLangNr(SHr.LangCode,LangNrr);
+  BlockLoad(SFb);
+
+  PrintNaturalResourceMatrix(SHr);
+  PrintBoxItemFields_SHVc(SHr,LangNrr,SFb);
+  PrintItemsGroupedByItemGroup(SHr,LangNrr,SFb);
+
+  if SHr.OrderNr != -1 then begin
+    IVr.OrderNr = SHr.OrderNr;
+    wloop = true;
+    While LoopKey("OrderNr",IVr,1,wloop) begin
+      if IVr.OrderNr != SHr.OrderNr then begin
+        wloop = false;
+      end else begin
+        if IVr.InvType == kInvoiceTypeDownpayment then begin
+          OutFormField("FF_DOWNPAYMENTINVOICE", IVr.SerNr);
+        end;
+        if IVr.InvType == kInvoiceTypeNormal then begin
+          if blankdate(lastIVr.InvDate) then begin
+            RecordCopy(lastIVr,IVr);
+          end else begin
+            if lastIVr.InvDate > IVr.InvDate then begin
+              RecordCopy(lastIVr,IVr);
+            end;
+          end;
+        end;
+      end;
+    end;
+    if nonblankdate(lastIVr.InvDate) then begin
+      OutFormField("FF_LASTINVNUMBER", lastIVr.SerNr);
+      OutFormField("FF_LASTINVOFFICNUMBER", lastIVr.OfficialSerNr);
+    end;
+
+    ORr.SerNr = SHr.OrderNr;
+    if Readfirstmain(ORr,1,true) then begin
+      GetUserName(ORr.SalesMan, tstr);
+      OutFormField("FF_ORDERSALESMANNAME", tstr);
+    end;
+
+  end;
+
+  CUr.Code = SHr.CustCode;
+  if ReadFirstMain(CUr,1,true) then begin
+    OutFormField("FF_PRIMARYCONTACT", CUr.Person);
+    OutFormField("FF_EMAIL", CUr.eMail);
+  end;
+
+  return;
+end;

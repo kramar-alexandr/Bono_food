@@ -1,0 +1,90 @@
+
+event Startup
+begin
+
+  SetLangMode(LangLatvian,"LAT",2);
+
+  Maintenance("Veidot preču nosūtīšanu no pasūtījumiem (BLT)",BLT_CreateSHsFSOsVClass,BLT_CreateSHsFromSOsMn,modSO);
+
+  Import("Klientu pasūtījumu (Edisoft XML) imports (BMC)",0,ORXMLImpIn,modSO);
+
+  Maintenance("Klientu pasūtījumu eksports (Skannerim)",BLT_ORToScannerVClass,BLT_ORToScannerMn,modSO);
+
+  Setting("Atjaunot cenas",BLT_UpdatePIPriceLClass,modPO);
+
+  Setting("Klientu pas. imp. - artikulu grupas (BMC)",ORXMLImpArtGTClass,modSO);
+  Setting("Klientu pas. imp. - klienta kodi (BMC)",ORXMLImpCUTClass,modSO);
+  Setting("Klientu pas. imp. - kļūdas (BMC)",ORXMLImpErrorLClass,modSO);
+  Setting("Additional import items",AddORItemTClass,modSO);
+
+  Document("Preču saņemšanas paletes uzlīmes",BLT_PUPalletLabRClass,BLT_PUPalletLabForm,PULabFClass,modIN);
+
+  Document("BLT - Production labels",BLT_ProdLabelsRClass,BLT_ProdLabelsForm,BLT_ProdLabelsFClass,modProd);
+
+  Maintenance("Synchronize scanners",BLT_SyncAllScannerVClass,BLT_SyncAllScannerMn,modIN);
+  Maintenance("Saņemšanu eksports (Skannerim)",BLT_PUToScannerVClass,BLT_PUToScannerMn,modIN);
+  Maintenance("Nosūtīšanu eksports (Skannerim)",BLT_SHToScannerVClass,BLT_SHToScannerMn,modIN);
+  Maintenance("Saņemšanu imports (Skannerim)",BLT_PUFromScannerVClass,BLT_PUFromScannerMn,modIN);
+  Maintenance("Nosūtīšanu imports (Skannerim)",BLT_SHFromScannerVClass,BLT_SHFromScannerMn,modIN);
+  Maintenance("Artikulu eksports (Skannerim)",BLT_INToScannerVClass,BLT_INToScannerMn,modIN);
+  Maintenance("Delivery note and invoice import (EDI)",BLT_SHAndIVImportVClass,BLT_SHAndIVImportMn,modIN);
+
+  Setting("Svītru kodu skannera mapes",BLT_ScannerSetTClass,modIN);
+
+  Report("Daudzumu salīdzinājums",BLT_CompQtyRClass,BLT_CompQtyRn,0,modIN);
+
+  Maintenance("EDI invoice sync.",BLT_EDISyncVClass,BLT_EDISyncMn,modSL);
+  Maintenance("Real. rēķinu (Edisoft XML) eksports (BMC)",InvoiceBalticXMLExpVClass,InvoiceBalticXMLExpMn,modSL);
+
+	Setting("Real. rēķ. (Edisoft XML) eksp. iest. (BMC)",InvBalXMLExpFolTClass,modSL);
+	Setting("EDI iestatījumi",BLT_EDISetTClass,modSL);
+  Setting("Artikulu dabas resursi",ItemResourceLClass,modSL);
+  Setting("Dabas resursu tipi",NatResourceTypeLClass,modSL);
+
+  Report("Dabas resursu pārskats",ItemResourceUsageRClass,ItemResourceUsageRn,0,modSL);
+
+  Setting("Weighing machine settings",BLT_WeightSetTClass,modSY);
+
+  SString(1100001,"Ierakstam jābūt negrāmatotam");
+  SString(1100002,"Ražojums nedrīkst būt pabeigts");
+  SString(1100003,"Weight not received");
+
+  SString(1100004,"From pos.");
+  SString(1100005,"To pos.");
+
+  SString(1100006,"Default Picking Position not specified");
+  SString(1100007,"Default Picking Position already taken");
+  SString(1100008,"Deliveries for this route on particular date are forbidden");
+  SString(1100009,"Derīguma ter.");
+
+  SString(1100010,"Kopā kastes");
+
+  SString(1100011,"Klienta pasūtījumiem nav nummuru sērijas!");
+  SString(1100012,"Lūdzu eksporta iestatījumos aizpildiet sūtītāja ILN kodu!");
+  SString(1100013,"Lūdzu eksporta iestatījumos aizpildiet sūtītāja kontakta kodu!");
+  SString(1100014,"Lūdzu eksporta iestatījumos aizpildiet saņēmēja ILN kodu!");
+  SString(1100015,"Lūdzu eksporta iestatījumos aizpildiet saņēmēja kontakta kodu!");
+  SString(1100016,"Lūdzu eksporta iestatījumos aizpildiet ceļu uz eksporta mapi!");
+  SString(1100017,"Klientu pas. ar šādu ats. numuru jau ir ieimportēts!");
+  SString(1100018,"Netika atrasts klienta kods ILN kodam ");
+  SString(1100019,"Netika atrasta adrese ar ILN kodu ");
+  SString(1100020,"Klienta pasūtījumā nav atrasts viens vai vairāki artikuli!");
+
+  SString(1100021,"Nav norādīta importa mape, lūdzu pārbaudiet EDI iestatījumu");
+  SString(1100022,"Importa laikā bija kļūdas, lūdzu pārbaudiet importa kļūdu reģistru");
+  SString(1100023,"Daudzumu salīdzinājums");
+  SString(1100024,"Apst. daudzums");
+  SString(1100025,"Mūsu daudzums");
+  SString(1100026,"Derīguma termiņš neatbilst klienta prasībām");
+  SString(1100027,"Norādiet jauno cenu");
+  SString(1100028,"Cenu atjaunošana pabeigta");
+  SString(1100029,"Datumam jābūt periodā");
+
+  SString(1100030,"Akcija no");
+  SString(1100031,"Akcija līdz");
+  SString(1100032,"Akc. cena");
+  SString(1100033,"Min. derīguma termiņam jābūt lielākam vai vienādam ar 0");
+  SString(1100034,"Derīguma termiņš neatblist minimālajām prasībām");
+
+  return;
+end;

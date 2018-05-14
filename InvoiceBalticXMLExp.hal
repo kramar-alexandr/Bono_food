@@ -1,0 +1,484 @@
+external inner procedure NewLineExport();
+external inner function val FindVAT(string,val,Integer,Integer);
+external updating procedure BLT_UpdateInvoiceEDIFlag(longint);
+
+global
+procedure InvoiceBalticXMLExpMn(record RcVc RepSpec)
+begin
+	// do nothing, just closes window
+
+	return;
+end;
+
+function string 255 ConvertToXML(string source)
+begin
+  string 255 res;
+  Integer l,i;
+  string 6 addstr;
+
+  l = len(source);
+  for (i=0;i<l;i=i+1) begin
+    addstr = Mid(source,i,1);
+    switch (addstr) begin
+      case "<": addstr = "&lt;";
+      case ">": addstr = "&gt;";
+      case "&": addstr = "&amp;";
+      case "'": addstr = "&apos;";
+      case """": addstr = "&quot;";
+    end;
+    res = res & addstr;
+  end;
+  ConvertToXML = res;
+  return;
+end;
+
+procedure ExportTheLevel(Integer level)
+begin
+  string 255 tstr;
+  Integer i;
+
+  tstr = "";
+  for (i=0;i<level;i=i+1) begin
+    tstr = tstr & chr(9);
+  end;
+  ExportPadString(tstr,len(tstr)," ",false);
+  return;
+end;
+
+procedure ExportPlainXml(string value,Integer level)
+begin
+
+  ExportTheLevel(level);
+  ExportPadString(value,BytesInString(value)," ",false);
+  NewLineExport;
+  return;
+end;
+
+function string 255 TimeStampStr()
+begin
+  string 255 res,tstr;
+  Date td;
+  Time tt;
+
+  tt = CurrentTime;
+  td = CurrentDate;
+
+	tstr = td.day;
+  if (len(tstr)<2) then begin tstr = "0" & td.day; end;
+  res = tstr;
+  tstr = td.month;
+  if (len(tstr)<2) then begin tstr = "0" & td.month; end;
+  res = res & tstr;
+  res = res & td.year;
+
+  tstr = tt.hour;
+  if (len(tstr)<2) then begin tstr = "0" & tt.hour; end;
+  res = res & tstr;
+  tstr = tt.minute;
+  if (len(tstr)<2) then begin tstr = "0" & tt.minute; end;
+  res = res & tstr;
+  tstr = tt.second;
+  if (len(tstr)<2) then begin tstr = "0" & tt.second; end;
+  res = res & tstr;
+  TimeStampStr = res;
+  return;
+end;
+
+function val GetVATprc(string vatcode)
+BEGIN
+  record VATCodeBlock VATRec;
+  row VATCodeBlock VATrw;
+  Integer i,rwcnt;
+  val res;
+
+  BlockLoad(VATRec);
+  rwcnt = MatRowCnt(VATRec);
+  for (i=i;i<rwcnt;i=i+1) begin
+    MatRowGet(VATRec,i,VATrw);
+    if (vatcode==VATrw.VATCode) then begin
+      res = VATrw.ExVatpr;
+      i = rwcnt;
+    end;
+  end;
+  GetVATprc = res;
+  RETURN;
+END;
+
+function string 255 GetAdress(record CUVc CUr)
+begin
+	string 255 adress;
+
+	adress = CUr.InvAddr0;
+  if nonblank(CUr.InvAddr1) then begin
+  	if nonblank(adress) then begin
+  		adress = adress & " " & CUr.InvAddr1;
+  	end else begin
+  		adress = CUr.InvAddr1;
+  	end;
+  end;
+  if nonblank(CUr.InvAddr2) then begin
+  	if nonblank(adress) then begin
+  		adress = adress & " " & CUr.InvAddr2;
+  	end else begin
+  		adress = CUr.InvAddr2;
+  	end;
+  end;
+  if nonblank(CUr.InvAddr3) then begin
+  	if nonblank(adress) then begin
+  		adress = adress & " " & CUr.InvAddr3;
+  	end else begin
+  		adress = CUr.InvAddr3;
+  	end;
+  end;
+  if nonblank(CUr.InvAddr4) then begin
+  	if nonblank(adress) then begin
+  		adress = adress & " " & CUr.InvAddr4;
+  	end else begin
+  		adress = CUr.InvAddr4;
+  	end;
+  end;
+
+	GetAdress = adress;
+	return;
+end;
+
+function val ConvertBlank(val tmp)
+begin
+	val res;
+
+	res = tmp;
+	if blank(res) then begin
+		res = 0;
+	end;
+
+	ConvertBlank = res;
+	return;
+end;
+
+global
+procedure BLT_ExportEDIInvoices(string folder, string custcode, longint invnr, date sd, date ed, boolean onlyEdiCustf, boolean updateInvf, boolean unsentf)
+begin
+  integer i,j,wn,rwcnt,level;
+  string 13 sender,receiver;
+  record INVc INr;
+  integer line;
+  record IVVc IVr;
+  row IVVc IVrw;
+  boolean wLoop,testf;
+  record InvBalXMLExpFolBlock InvBalXMLExpFolBlockr;
+	record DelAddrVc DelAddrr;
+  string 255 fileName;
+  record CUVc CUrRecv,CUrSend,CUr;
+  boolean badFile;
+  string 255 adress;
+  integer linenr,sign;
+  string 1 taxtype;
+  val taxrate;
+  boolean credit;
+  record PDVc PDr;
+
+  BlockLoad(InvBalXMLExpFolBlockr);
+  wLoop = true;
+  IVr.TransDate = sd;
+  while LoopKey("TransDate",IVr,1,wLoop) begin
+  	if (IVr.TransDate > ed) then begin
+  		wLoop = false;
+  	end;
+  	if (wLoop) then begin
+  		testf = true;
+  		if nonblank(custcode) and (IVr.CustCode != custcode) then begin
+  			testf = false;
+  		end;
+  		if (invnr != -1) and (IVr.SerNr != invnr) then begin
+  			testf = false;
+  		end;
+      if unsentf and IVr.SentToEDI == 1 then begin
+        testf = false;
+      end;
+      if testf and onlyEdiCustf then begin
+        testf = false;
+        CUr.Code = IVr.CustCode;
+        if ReadFirstMain(Cur,1,true) then begin
+          if CUr.EDIFlag==1 then begin
+            testf = true;
+          end;
+        end;
+      end;
+  		if (testf) then begin
+  			badFile = false;
+  			adress = "";
+  			fileName = folder & IVr.SerNr;
+  			fileName = fileName & "_" & TimeStampStr  & ".xml";
+			  CreateFile(fileName);
+        stopalert("fn=" & fileName);
+
+			  level = 0;
+		  	ExportPlainXml("<Document-Invoice>",level);
+
+			  level = level + 1;
+			  ExportPlainXml("<Invoice-Header>",level);
+			  level = level + 1;
+			  ExportPlainXml("<InvoiceNumber>" & ConvertToXML(IVr.OfficialSerNr) & "</InvoiceNumber>",level); //
+			  ExportPlainXml("<InvoiceDate>" & ConvertToXML(DateToString(IVr.TransDate,"YYYY-MM-DD")) & "</InvoiceDate>",level); //
+			  ExportPlainXml("<InvoiceCurrency>" & ConvertToXML(IVr.CurncyCode) & "</InvoiceCurrency>",level); //
+			  ExportPlainXml("<InvoicePaymentDueDate>" & ConvertToXML(DateToString(IVr.PayDate,"YYYY-MM-DD")) & "</InvoicePaymentDueDate>",level); //
+			  ExportPlainXml("<DocumentFunctionCode>" & ConvertToXML("O") & "</DocumentFunctionCode>",level); //
+			  credit = false;
+			  PDr.Code = IVr.PayDeal;
+		  	if ReadFirstMain(PDr,1,true) then begin
+		  		if (PDr.PDType == kInvoiceTypeCredit) then begin
+		  			credit = true;
+		  		end;
+		  	end;
+        sign = 1;
+			  if (credit) then begin
+          sign = -1;
+			  	ExportPlainXml("<DocumentNameCode>" & ConvertToXML("381") & "</DocumentNameCode>",level); //
+			  end else begin
+			  	ExportPlainXml("<DocumentNameCode>" & ConvertToXML("380") & "</DocumentNameCode>",level); //
+					ExportPlainXml("<Order>",level); //
+					level = level + 1;
+					ExportPlainXml("<BuyerOrderNumber>" & ConvertToXML(IVr.CustOrdNr) & "</BuyerOrderNumber>",level); //
+					level = level - 1;
+					ExportPlainXml("</Order>",level); //
+			  end;
+
+			  if nonblank(IVr.OfficialSerNr) then begin
+				  ExportPlainXml("<Reference>",level);
+				  level = level + 1;
+				  ExportPlainXml("<InvoiceReferenceNumber>" & ConvertToXML(IVr.OfficialSerNr) & "</InvoiceReferenceNumber>",level); //
+				  level = level - 1;
+				  ExportPlainXml("</Reference>",level);
+				end;
+
+			  ExportPlainXml("<Delivery>",level);
+			  level = level + 1;
+				DelAddrr.CustCode = IVr.CustCode;
+				DelAddrr.DelCode = IVr.DelAddrCode;
+				ReadFirstMain(DelAddrr,2,true);
+			  ExportPlainXml("<DeliveryLocationNumber>" & ConvertToXML(DelAddrr.RecipientGLN) & "</DeliveryLocationNumber>",level); //
+			  ExportPlainXml("<CodeBySeller>" & ConvertToXML(IVr.DelAddrCode) & "</CodeBySeller>",level); //
+			  ExportPlainXml("<DeliveryDate>" & ConvertToXML(DateToString(IVr.TransDate,"YYYY-MM-DD")) & "</DeliveryDate>",level); //
+			  ExportPlainXml("<DespatchNumber>" & ConvertToXML(IVr.SerNr) & "</DespatchNumber>",level); //
+			  level = level - 1;
+			  ExportPlainXml("</Delivery>",level);
+			  level = level - 1;
+			  ExportPlainXml("</Invoice-Header>",level);
+			  level = level - 1;
+
+
+			  CUrSend.Code = InvBalXMLExpFolBlockr.DefSendCustCode;
+			  if !(ReadFirstMain(CUrSend,1,true)) then begin
+			  	badFile = true;
+			  end;
+			  CUrRecv.Code = IVr.CustCode;
+			  if !(ReadFirstMain(CUrRecv,1,true)) then begin
+			  	badFile = true;
+			  end;
+
+			  // doc parties
+			  level = level + 1;
+			  ExportPlainXml("<Document-Parties>",level);
+			  level = level + 1;
+
+			  ExportPlainXml("<Sender>",level);
+			  level = level + 1;
+			  ExportPlainXml("<ILN>" & ConvertToXML(InvBalXMLExpFolBlockr.DefSendILN) & "</ILN>",level); //
+			  ExportPlainXml("<Name>" & ConvertToXML(CUrSend.Name) & "</Name>",level); //
+			  level = level - 1;
+			  ExportPlainXml("</Sender>",level);
+
+			  ExportPlainXml("<Receiver>",level);
+			  level = level + 1;
+			  ExportPlainXml("<ILN>" & ConvertToXML(CUrRecv.RecipientGLN) & "</ILN>",level); //
+			  ExportPlainXml("<CodeBySender>" & ConvertToXML(CUrRecv.VATNr) & "</CodeBySender>",level); //
+			  level = level - 1;
+			  ExportPlainXml("</Receiver>",level);
+
+			  level = level - 1;
+			  ExportPlainXml("</Document-Parties>",level);
+			  level = level - 1;
+
+			  // inv parties
+			  level = level + 1;
+			  ExportPlainXml("<Invoice-Parties>",level);
+			  level = level + 1;
+
+			  ExportPlainXml("<Buyer>",level);
+			  level = level + 1;
+			  ExportPlainXml("<ILN>" & ConvertToXML(CUrRecv.RecipientGLN) & "</ILN>",level); //
+			  ExportPlainXml("<CodeBySeller>" & ConvertToXML(CUrRecv.VATNr) & "</CodeBySeller>",level); //
+			  adress = GetAdress(CUrRecv);
+			  ExportPlainXml("<Name>" & ConvertToXML(adress) & "</Name>",level); //
+			  level = level - 1;
+			  ExportPlainXml("</Buyer>",level);
+
+			  ExportPlainXml("<Payer>",level);
+			  level = level + 1;
+			  ExportPlainXml("<ILN>" & ConvertToXML(CUrRecv.RecipientGLN) & "</ILN>",level); //
+			  ExportPlainXml("<CodeBySeller>" & ConvertToXML(CUrRecv.VATNr) & "</CodeBySeller>",level); //
+			  ExportPlainXml("<Name>" & ConvertToXML(adress) & "</Name>",level); //
+			  level = level - 1;
+			  ExportPlainXml("</Payer>",level);
+
+			  ExportPlainXml("<Seller>",level);
+			  level = level + 1;
+			  ExportPlainXml("<ILN>" & ConvertToXML(InvBalXMLExpFolBlockr.DefSendILN) & "</ILN>",level); //
+			  ExportPlainXml("<TaxID>" & ConvertToXML(CUrSend.VATNr) & "</TaxID>",level); //
+			  ExportPlainXml("<CodeBySeller>" & ConvertToXML(CUrSend.VATNr) & "</CodeBySeller>",level); //
+			  ExportPlainXml("<UtilizationRegisterNumber>" & ConvertToXML(CUrSend.RegNr1) & "</UtilizationRegisterNumber>",level); //
+			  ExportPlainXml("<Name>" & ConvertToXML(CUrSend.Name) & "</Name>",level); //
+			  adress = GetAdress(CUrSend);
+			  if (Len(adress) > 35) then begin
+			  	adress = Left(adress,35);
+			  end;
+			  ExportPlainXml("<StreetAndNumber>" & ConvertToXML(adress) & "</StreetAndNumber>",level); //
+			  level = level - 1;
+			  ExportPlainXml("</Seller>",level);
+
+			  level = level - 1;
+			  ExportPlainXml("</Invoice-Parties>",level);
+			  level = level - 1;
+
+			  // rindas
+			  rwcnt = MatRowCnt(IVr);
+			  linenr = 0;
+			  if (rwcnt > 0) then begin
+				  level = level + 1;
+					ExportPlainXml("<Invoice-Lines>",level);
+				  for (i=0;i<rwcnt;i=i+1) begin
+				  	MatRowGet(IVr,i,IVrw);
+				  	INr.Code = IVrw.ArtCode;
+						if ReadFirstMain(INr,1,true) then begin
+						  linenr = linenr + 1;
+
+						  level = level + 1;
+						  ExportPlainXml("<Line>",level);
+						  level = level + 1;
+						  ExportPlainXml("<Line-Item>",level);
+						  level = level + 1;
+
+					  	ExportPlainXml("<LineNumber>" & ConvertToXML(linenr) & "</LineNumber>",level); //
+					  	ExportPlainXml("<EAN>" & ConvertToXML(INr.BarCode) & "</EAN>",level); //
+					  	ExportPlainXml("<SupplierItemCode>" & ConvertToXML(INr.AlternativeCode) & "</SupplierItemCode>",level); //
+						  ExportPlainXml("<ItemDescription>" & ConvertToXML(IVrw.Spec) & "</ItemDescription>",level); //
+						  ExportPlainXml("<InvoiceQuantity>" & ConvertToXML(ValToString(ConvertBlank(IVrw.Quant * sign),M423Val,"",".",0)) & "</InvoiceQuantity>",level); //
+						  ExportPlainXml("<InvoiceUnitNetPrice>" & ConvertToXML(ValToString(ConvertBlank(IVrw.Price * sign),M423Val,"",".",0)) & "</InvoiceUnitNetPrice>",level); //
+						  ExportPlainXml("<UnitOfMeasure>" & ConvertToXML(IVrw.UnitCode) & "</UnitOfMeasure>",level); //
+						  ExportPlainXml("<TaxRate>" & ConvertToXML(ValToString(ConvertBlank(GetVATprc(IVrw.VATCode)),M4Val,"",".",0)) & "</TaxRate>",level); //
+						  taxrate = GetVATprc(IVrw.VATCode);
+						  if (GetVATprc(IVrw.VATCode) != 0) then begin
+						  	ExportPlainXml("<TaxCategoryCode>" & ConvertToXML("S") & "</TaxCategoryCode>",level); //
+						  	taxtype = "S";
+						  end else begin
+						  	ExportPlainXml("<TaxCategoryCode>" & ConvertToXML("E") & "</TaxCategoryCode>",level); //
+						  	taxtype = "E";
+						  end;
+						  ExportPlainXml("<TaxAmount>" & ConvertToXML(ValToString(ConvertBlank(FindVAT(IVrw.VATCode,IVrw.Sum,IVr.InclVAT,IVr.NoTAXonVAT) * sign),M4Val,"",".",0)) & "</TaxAmount>",level); //
+						  ExportPlainXml("<NetAmount>" & ConvertToXML(ValToString(ConvertBlank(IVrw.Sum * sign),M4Val,"",".",0)) & "</NetAmount>",level); //
+						  //ExportPlainXml("<InvoiceUnitGrossPrice>" & ValToString(ConvertBlank(INr.UPrice1),M45Val,"",".",0) & "</InvoiceUnitGrossPrice>",level); //
+						  level = level - 1;
+						  ExportPlainXml("</Line-Item>",level);
+						  ExportPlainXml("<Line-Delivery>",level);
+						  level = level + 1;
+              ExportPlainXml("<DeliveryLocationNumber>" & ConvertToXML(DelAddrr.RecipientGLN) & "</DeliveryLocationNumber>",level); //
+      			  ExportPlainXml("<CodeBySeller>" & ConvertToXML(IVr.DelAddrCode) & "</CodeBySeller>",level); //
+      			  ExportPlainXml("<DeliveryDate>" & ConvertToXML(DateToString(IVr.TransDate,"YYYY-MM-DD")) & "</DeliveryDate>",level); //
+      			  ExportPlainXml("<DespatchNumber>" & ConvertToXML(IVr.SerNr) & "</DespatchNumber>",level); //
+						  level = level - 1;
+						  ExportPlainXml("</Line-Delivery>",level);
+						  level = level - 1;
+						  ExportPlainXml("</Line>",level);
+						  level = level - 1;
+				  	end;
+			  	end;
+			  	ExportPlainXml("</Invoice-Lines>",level);
+
+			  	ExportPlainXml("<Invoice-Summary>",level);
+			  	level = level + 1;
+				  ExportPlainXml("<TotalLines>" & ConvertToXML(linenr) & "</TotalLines>",level); //
+				  ExportPlainXml("<TotalNetAmount>" & ConvertToXML(ValToString(ConvertBlank(IVr.Sum1 * sign),M4Val,"",".",0)) & "</TotalNetAmount>",level); //
+				  ExportPlainXml("<TotalTaxAmount>" & ConvertToXML(ValToString(ConvertBlank(IVr.Sum3 * sign),M4Val,"",".",0)) & "</TotalTaxAmount>",level); //
+				  ExportPlainXml("<TotalGrossAmount>" & ConvertToXML(ValToString(ConvertBlank(IVr.Sum4 * sign),M4Val,"",".",0)) & "</TotalGrossAmount>",level); //
+				  ExportPlainXml("<Tax-Summary>",level);
+				  level = level + 1;
+				  ExportPlainXml("<Tax-Summary-Line>",level);
+				  level = level + 1;
+				  ExportPlainXml("<TaxRate>" & ConvertToXML(ValToString(ConvertBlank(taxrate),M4Val,"",".",0)) & "</TaxRate>",level); //
+				  ExportPlainXml("<TaxCategoryCode>" & ConvertToXML(taxtype) & "</TaxCategoryCode>",level); //
+				  ExportPlainXml("<TaxAmount>" & ConvertToXML(ValToString(ConvertBlank(IVr.Sum3),M4Val,"",".",0)) & "</TaxAmount>",level); //
+				  ExportPlainXml("<TaxableAmount>" & ConvertToXML(ValToString(ConvertBlank(IVr.Sum1),M4Val,"",".",0)) & "</TaxableAmount>",level); //
+				  level = level - 1;
+				  ExportPlainXml("</Tax-Summary-Line>",level);
+				  level = level - 1;
+				  ExportPlainXml("</Tax-Summary>",level);
+				  level = level - 1;
+			  	ExportPlainXml("</Invoice-Summary>",level);
+				  level = level - 1;
+				end else begin
+					badFile = true;
+				end;
+
+	  		ExportPlainXml("</Document-Invoice>",level);
+
+			  CloseFile;
+
+			  if (linenr == 0) then begin
+					badFile = true;
+				end;
+
+			  if (badFile) then begin
+			  	Delete_File(fileName);
+			  end else begin
+          if updateInvf then begin
+            queued.BLT_UpdateInvoiceEDIFlag(IVr.SerNr);
+          end;
+        end;
+
+  		end;
+  	end;
+  end;
+
+	StopExport:;
+  return;
+end;
+
+global
+procedure StartInvoiceBalticXMLExpSm()
+begin
+  integer wn;
+  record RcVc RepSpec;
+  record InvBalXMLExpFolBlock InvBalXMLExpFolBlockr;
+  string 255 fromFolder;
+
+  wn = CurWindow;
+	DeselectWindow(wn,false);
+	GetWindowRecord(wn,RepSpec);
+	CloseWindow(wn);
+
+	BlockLoad(InvBalXMLExpFolBlockr);
+
+	if blank(InvBalXMLExpFolBlockr.DefSendILN) then begin
+		MessageBox(1100012,"");
+  	goto LStartInvoiceBalticXMLExpSm;
+	end;
+	if blank(InvBalXMLExpFolBlockr.DefSendCustCode) then begin
+		MessageBox(1100013,"");
+  	goto LStartInvoiceBalticXMLExpSm;
+	end;
+
+	if blank(InvBalXMLExpFolBlockr.Folder) then begin
+		MessageBox(1100016,"");
+  	goto LStartInvoiceBalticXMLExpSm;
+	end;
+
+	fromFolder = InvBalXMLExpFolBlockr.Folder;
+	if (Right(InvBalXMLExpFolBlockr.Folder,1) != chr(92)) then begin
+		fromFolder = fromFolder & chr(92);
+	end;
+
+  BLT_ExportEDIInvoices(fromFolder, RepSpec.f1, RepSpec.long1, RepSpec.sStartDate, RepSpec.sEndDate, false, false, false);
+
+LStartInvoiceBalticXMLExpSm:;
+  return;
+end;

@@ -1,0 +1,89 @@
+
+event Startup
+begin
+  SetLangMode(LangLithuanian,"LIT",2);
+
+  Maintenance("Sukurti siuntimus iš užsakymų (BLT)",BLT_CreateSHsFSOsVClass,BLT_CreateSHsFromSOsMn,modSO);
+
+  Import("Pardavimų užsakymo (Edisoft XML) importas",0,ORXMLImpIn,modSO);
+
+  Maintenance("Pardavimų užsakymų eksportas į barkodų skaitytuvą",BLT_ORToScannerVClass,BLT_ORToScannerMn,modSO);
+
+  Setting("Atnaujinti Kainas",BLT_UpdatePIPriceLClass,modPO);
+
+  Setting("Pardavimų užsakymo importas - prekių grupės",ORXMLImpArtGTClass,modSO);
+  Setting("Pardavimų užsakymo importas - pirkėjo kodai",ORXMLImpCUTClass,modSO);
+  Setting("Pardavimų užsakymo importas - klaidos",ORXMLImpErrorLClass,modSO);
+  Setting("Additional import items",AddORItemTClass,modSO);
+
+  Document("Goods Receipt Pallet Labels",BLT_PUPalletLabRClass,BLT_PUPalletLabForm,PULabFClass,modIN);
+
+  Document("BLT - Production labels",BLT_ProdLabelsRClass,BLT_ProdLabelsForm,BLT_ProdLabelsFClass,modProd);
+
+  Maintenance("Synchronize scanners",BLT_SyncAllScannerVClass,BLT_SyncAllScannerMn,modIN);
+  Maintenance("Gavimų eksportas į barkodų skaitytuvą",BLT_PUToScannerVClass,BLT_PUToScannerMn,modIN);
+  Maintenance("Siuntimų eksportas į barkodų skaitytuvą",BLT_SHToScannerVClass,BLT_SHToScannerMn,modIN);
+  Maintenance("Gavimų importas iš barkodų skaitytuvo",BLT_PUFromScannerVClass,BLT_PUFromScannerMn,modIN);
+  Maintenance("Siuntimų importas iš barkodų skaitytuvo",BLT_SHFromScannerVClass,BLT_SHFromScannerMn,modIN);
+  Maintenance("Item export to barcode scanner",BLT_INToScannerVClass,BLT_INToScannerMn,modIN);
+  Maintenance("Delivery note and invoice import (EDI)",BLT_SHAndIVImportVClass,BLT_SHAndIVImportMn,modIN);
+
+  Setting("Barcode scanner folders",BLT_ScannerSetTClass,modIN);
+
+  Report("Kiekių palyginimas",BLT_CompQtyRClass,BLT_CompQtyRn,0,modIN);
+
+  Maintenance("EDI invoice sync.",BLT_EDISyncVClass,BLT_EDISyncMn,modSL);
+  Maintenance("Faktūros (Edisoft XML) eksportas",InvoiceBalticXMLExpVClass,InvoiceBalticXMLExpMn,modSL);
+
+	Setting("Faktūros (Edisoft XML) exporto nustatymai",InvBalXMLExpFolTClass,modSL);
+  Setting("EDI nustatymai",BLT_EDISetTClass,modSL);
+  Setting("Prekių ištekliai",ItemResourceLClass,modSL); //not just for LVA
+  Setting("Natural Resource Types",NatResourceTypeLClass,modSL); //not just for LVA
+
+  Report("Natural Resource Usage",ItemResourceUsageRClass,ItemResourceUsageRn,0,modSL); //not just for LVA
+
+  Setting("Weighing machine settings",BLT_WeightSetTClass,modSY);
+
+  SString(1100001,"Record must not be OKed");
+  SString(1100002,"Product must not be finished");
+  SString(1100003,"Weight not received");
+
+  SString(1100004,"From pos.");
+  SString(1100005,"To pos.");
+
+  SString(1100006,"Default Picking Position not specified");
+  SString(1100007,"Default Picking Position already taken");
+  SString(1100008,"Deliveries for this route on particular date are forbidden");
+  SString(1100009,"Galioja iki");
+
+  SString(1100010,"Total boxes");
+
+  SString(1100011,"Missing number series for sales orders!");
+  SString(1100012,"ILN code not specified, please check export setting");
+  SString(1100013,"Sender contact code not specified, please check export setting");
+  SString(1100014,"Receiver ILN code not specified, please check export setting");
+  SString(1100015,"Receiver contact code not specified, please check export setting");
+  SString(1100016,"Path to export folder not specified, please check export setting");
+  SString(1100017,"Sales order with this number was already imported!");
+  SString(1100018,"No customer code for ILN code ");
+  SString(1100019,"No address for ILN code ");
+  SString(1100020,"One or more items do not exist");
+
+  SString(1100021,"Import folder not specified, please check EDI settings");
+  SString(1100022,"Import had errors, please check import error register");
+  SString(1100023,"Kiekių palyginimas");
+  SString(1100024,"Patv. kiekis");
+  SString(1100025,"Mūsų kiekis");
+  SString(1100026,"Best before date doesn’t meet customers’ minimum requirements");
+  SString(1100027,"Nurodykite kainą");
+  SString(1100028,"Price update finished");
+  SString(1100029,"Date must be within period");
+
+  SString(1100030,"Akcija nuo");
+  SString(1100031,"Akcija iki");
+  SString(1100032,"Akc. kaina");
+  SString(1100033,"Minimal best berfore days must be greater or equal to zero");
+  SString(1100034,"Best before date doesn’t meet minimum requirements");
+
+  return;
+end;

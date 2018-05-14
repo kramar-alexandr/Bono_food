@@ -1,0 +1,29 @@
+external updating procedure BLT_SDMakeStockMovement(record SDVc,integer);
+
+global updating
+function LongInt SDVcRecordSaveAfter(Var Record SDVc SDr, Record SDVc SD2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.SDVcRecordSaveAfter(SDr,SD2r,stat,check);
+  if (SDr.OKFlag!=0) then begin
+    BLT_SDMakeStockMovement(SDr,1); //From rest of location to 1
+  end;
+
+  SDVcRecordSaveAfter = res;
+  return;
+end;
+
+global updating
+function LongInt SDVcRecordUpdateAfter(Var Record SDVc SDr, Record SDVc SD2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.SDVcRecordUpdateAfter(SDr,SD2r,stat,check);
+  if ((SDr.OKFlag!=0) and (SD2r.OKFlag==0)) then begin
+    BLT_SDMakeStockMovement(SDr,1); //From rest of location to 1
+  end;
+
+  SDVcRecordUpdateAfter = res;
+  return;
+end;

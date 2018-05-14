@@ -1,0 +1,745 @@
+remote updating procedure RemoteCreateSDFromPO(longint);
+remote inner function Boolean GetFirstItem(var string,var record INVc);
+
+event DefineWindows
+begin
+  real h,h1,hl,h2,h3,h4,h5,h6,h7,hs,v,vm,l,vs,f,v2,t,es,hm,hof,fs,vs2,hs1,hs2;
+  string 255 label;
+
+  SetLangMode(LangLatvian,"CELAT",2);
+
+  WindowBegin("Bāzes logs",PhMasterWClass,CGother,RcType);
+  UseView(RcVc);
+  es = 6;
+//  SetWRect(20,65,630+hs,499+11*3);
+  SetWRect(1,65,240,499+11*3);
+  hm = 40; v=41; h2 = 80;
+  h=40; hs1=90; hs2=150; v=50; vs=20; vs2=10;
+  StaticText(h,v,"SAŅEMŠANAS",false);
+  ColourPushButton(h+hs1,v-vs,h+hs2,v+vs2,"StartPUSm","",9);
+  /*StaticText(70,v+vs+23,"PRINT DISCOUNT LABELS",false);
+  ColourPushButton(h,v+=vs+30,h+hs,v+vs,"OpenPrintDiscountLabelsSm","",9);
+  StaticText(100,v+vs+23,"CALIBRATE",false);
+  ColourPushButton(h,v+=vs+30,h+hs,v+vs,"OpenCalibratePrinterSm","",7);*/
+  /*AddBic(503,504,h=hm,v,ToolCalendar,0,"Kalend‚rs");
+  AddBic(501,502,h+=h2,v,ToolMail,0,"Pasts");
+  AddBic(623,624,h+=h2,v,ToolTodo,0,"Uzdevumi");
+  h = hm; v=v+73;
+  AddBic(632,730,h,v,ToolModule,0,  "Moduŗi");
+  AddBic(21423,21424,h+=h2,v,ToolConferences,0,"Konferences");
+  AddBic(29017,29018,h+=h2,v,ToolArchive,0,"Darba virsma");
+  h = hm; v=v+73;
+  AddBic(701,700,h,v,ToolRegs,0,  "Re®istri");
+  AddBic(731,734,h+=h2,v,ToolReport,0,  "Atskaites");
+  AddBic(737,738,h+=h2,v,ToolPHRoutines,0,  "Rut´nas");
+  h = hm; v=v+58;
+  BlackFrame(15,v,312,1,"Module:$",kFrameShadeNone);
+  SpecMenuItem("P‚rtraukt autom‚tisko piesl•gäanos",' ',20);*/
+  EndWindow;
+
+  //SetLangMode(LangLatvian,"LAT",1);
+
+  WindowBegin("Veidot saņemšanas 1",CreatePU1WClass,CGother,RcType);
+  UseView(RcVc);
+  SetWRect(20,80,400,240);
+  h=82; v=55; vs=35;
+  StaticText(h,v,"PASŪTĪJUMA NR.",false);
+  h=40; v=60;
+  EditFieldTL(h,v,160,"",M4UStr,Normal,255,f3,false,0);
+  EditFieldTL(h+1024,v,160,"",M4UStr,Normal,255,f10,false,0);
+  h=30; vs=45; vs2=40;
+  StaticText(55,v+vs-8,"ATCELT",false);
+  StaticText(155,v+vs-8,"TĀLĀK",false);
+  ColourPushButton(h,v+=vs,h+80,v+vs2,"CancelPUSm","",1);
+  h=130;
+  ColourPushButton(h,v,h+80,v+vs2,"CreatePU2Sm","",2);
+
+  EndWindow;
+
+  WindowBegin("Veidot saņemšanas 2",CreatePU2WClass,CGother,RcType);
+  UseView(RcVc);
+  SetWRect(20,80,400,240);
+  h=85; v=55; vs=35;
+  StaticText(h,v,"ARTIKULA NR.",false);
+  h=40; v=60;
+  EditFieldTL(h,v,160,"",M4UStr,Normal,255,f3,false,0);
+  EditFieldTL(h+1024,v,160,"",M4UStr,Normal,255,f10,false,0);
+  h=80; vs=45; vs2=40;
+  StaticText(105,v+vs-8,"TĀLĀK",false);
+  ColourPushButton(h,v+=vs,h+80,v+vs2,"CreatePU3Sm","",2);
+  EndWindow;
+
+  WindowBegin("Veidot saņemšanas 3",CreatePU3WClass,CGother,RcType);
+  UseView(RcVc);
+  SetWRect(20,80,400,240);
+  h=100; v=40; vs=5; vs2=30;
+  StaticText(h,v,"DAUDZ. 1",false);
+  h=40;
+  EditFieldTL(h,v+=vs,50,"",M4Str,ViewOnly,255,f8,false,0);
+  EditFieldTL(h+60,v,90,"",M4UStr,Normal,255,f4,false,0);
+  EnterSkip(f5);
+  h=100;
+  StaticText(h,v+=vs2,"DAUDZ. 2",false);
+  h=40;
+  EditFieldTL(h,v+=vs,50,"",M4Str,ViewOnly,255,f9,false,0);
+  EditFieldTL(h+60,v,90,"",M4UStr,Normal,255,f5,false,0);
+  EnterSkip(f6);
+  h=100;
+  StaticText(h,v+=vs2,"DAUDZ. 3",false);
+  h=40;
+  EditFieldTL(h,v+=vs,50,"",M4Str,ViewOnly,255,f11,false,0);
+  EditFieldTL(h+60,v,90,"",M4UStr,Normal,255,f6,false,0);
+  EnterSkip(f7);
+  h=100;
+  StaticText(h,v+=vs2,"DAUDZ. 4",false);
+  h=40;
+  EditFieldTL(h,v+=vs,50,"",M4Str,ViewOnly,255,f12,false,0);
+  EditFieldTL(h+60,v,90,"",M4UStr,Normal,255,f7,false,0);
+  EditFieldTL(h+1024,v,160,"",M4UStr,Normal,255,f10,false,0);
+  EditFieldTL(h+1024,v,160,"",M4UStr,Normal,255,f11,false,0);
+  h=80; vs=45; vs2=40;
+  StaticText(105,v+vs-8,"TĀLĀK",false);
+  ColourPushButton(h,v+=vs,h+80,v+vs2,"CreatePU4Sm","",2);
+  EndWindow;
+
+  WindowBegin("Veidot saņemšanas 4",CreatePU4WClass,CGother,RcType);
+  UseView(RcVc);
+  SetWRect(20,80,400,240);
+  vs=5; vs2=30;
+  StaticText(h=82,v=40,"DERĪGUMA TERM.",false);
+  EditFieldTL(h=40,v+=vs,160,"",M4Date,Normal,0,d1,false,0);
+  StaticText(h=82,v+=vs2,"PARTIJAS NR.",false);
+  EditFieldTL(h=40,v+=vs,160,"",M4UStr,Normal,255,f5,false,0);
+  StaticText(h=82,v+=vs2,"RAŽOŠANAS DAT.",false);
+  EditFieldTL(h=40,v+=vs,160,"",M4Date,Normal,0,d2,false,0);
+  StaticText(h=82,v+=vs2,"KASTES NR.",false);
+  EditFieldTL(h=40,v+=vs,160,"",M4UStr,Normal,255,f7,false,0);
+  EditFieldTL(h+1024,v,160,"",M4UStr,Normal,255,f10,false,0);
+  h=30; vs=45; vs2=40;
+  StaticText(38,v+vs-8,"NĀKAMĀ PRECE",false);
+  StaticText(150,v+vs-8,"PABEIGT",false);
+  ColourPushButton(h,v+=vs,h+80,v+vs2,"CreatePUNextSm","",2);
+  h=130;
+  ColourPushButton(h,v,h+80,v+vs2,"CreatePUEndSm","",3);
+  EndWindow;
+
+  WindowBegin("Veidot saņemšanas 5",CreatePUWaitWClass,CGother,RcType);
+  UseView(RcVc);
+  SetWRect(20,80,400,240);
+  StaticText(h=70,v=80,"TIEK SAŅEMTAS PRECES",false);
+  StaticText(h=100,v+=20,"UZGAIDIET!",false);
+  EndWindow;
+
+  /*WindowBegin("Print Labels",ZebraPrintVClass,CGMnt,RcType);
+  SetWRect(20,80,400,240);
+  h=70; v=40; vs =20;
+  EditField(h,v,130,"ITEM",Normal,f1,false,0);
+  EditField(h,v+=vs,130,"COUNT",Normal,ArtMode,false,0);
+  h=85;
+  ButtonFrame(h,v=v+45,63,2,"Label type");
+  RadioButton(h,v,1,0,"Short 30x40",flags[0]);
+  RadioButton(h,v+=16,2,0,"Long 20x60",flags[0]);
+  RadioButton(h,v+=16,3,255,"Small 40x15",flags[0]);
+  //CheckBox(h-10,v=v+30,0,"Discount",flags[1]);
+  h=80; vs=45; vs2=40;
+  StaticText(108,v+vs-8,"PRINT",false);
+  ColourPushButton(h,v+=vs,h+80,v+vs2,"ZebraPrintMn2Sm","",2);
+  EndWindow;*/
+
+	return;
+end;
+
+global
+updating procedure StartPUSm()
+begin
+	time t;
+	record TmpCHDSDVc TmpCHDSDr;
+
+  // wildd 2016.01.20. 15:35:24 katram lietotajam bus unikals ieraksts, kas izveidojas ar visiem skenetajiem artikuliem
+  RecordNew(TmpCHDSDr);
+  TmpCHDSDr.SerNr = NextSerNr("TmpCHDSDVc",CurrentDate,-1,false,"");
+  TmpCHDSDr.UserCode = CurrentUser;
+  TmpCHDSDr.TransDate = CurrentDate;
+	TmpCHDSDr.TransTime = CurrentTime;
+  if RecordStore(TmpCHDSDr,false) then begin end;
+
+	t = CurrentTime;
+  NewTimedTask("CreatePU_GoWindow1","CreatePU_GoWindow1","CreatePU_GoWindow1",TmpCHDSDr.SerNr,CurrentDate,t,"","");
+
+  return;
+end;
+
+global
+procedure CreatePU_GoWindow1(string arg)
+begin
+	integer wn,nwn;
+	record RcVc RepSpec;
+
+	RepSpec.f1 = arg;
+
+	wn = FindWindow("CreatePUWaitWClass");
+  if (wn > 0) then begin
+  	Sleep(1);
+    CloseWindow(wn);
+	end;
+
+	nwn = OpenWindow("CreatePU1WClass",1,0,"","",RepSpec);
+
+  return;
+end;
+
+global
+updating procedure CreatePU2Sm()
+begin
+	integer wn;
+	time t;
+
+	wn = CurWindow;
+	t = CurrentTime;
+  NewTimedTask("CreatePU_GoWindow2","CreatePU_GoWindow2","CreatePU_GoWindow2",wn,CurrentDate,t,"","");
+
+  return;
+end;
+
+global
+updating function Boolean CreatePU1WClassOnEnterKey(Integer wn,string fieldname,Integer fn,Integer rownr)
+begin
+  Boolean res;
+  record RcVc RepSpec;
+
+  res = true;
+  GetWindowRecord(wn,RepSpec);
+  switch (fieldname) begin
+    case "f3":
+    	CreatePU2Sm;
+    	res = false;
+  end;
+
+  CreatePU1WClassOnEnterKey = res;
+  return;
+end;
+
+global
+updating procedure CreatePU_GoWindow2(string arg)
+begin
+	integer wn,nwn;
+	record RcVc RepSpec;
+	record POVc POr;
+	record TmpCHDSDVc TmpCHDSDr;
+
+  wn = FindWindow("CreatePU1WClass");
+  if (wn > 0) then begin
+  	DeselectWindow(wn,true);
+		GetWindowRecord(wn,RepSpec);
+
+		if blank(RepSpec.f3) then begin
+			//SetLangMode(LangLatvian,"LAT",1);
+    	MessageBox(0,"Jānorāda pas.nr!");
+    	WindowFieldGoto(wn,RepSpec,-1,"f3",false);
+    	goto LCreatePU_Window2;
+		end;
+		POr.SerNr = StringToLongInt(RepSpec.f3);
+		if !ReadFirstMain(POr,1,true) then begin
+			//SetLangMode(LangLatvian,"LAT",1);
+    	MessageBox(0,"Pas. neeksistē!");
+    	WindowFieldGoto(wn,RepSpec,-1,"f3",false);
+    	goto LCreatePU_Window2;
+		end;
+
+		TmpCHDSDr.SerNr = StringToLongInt(RepSpec.f1);
+    if ReadFirstMain(TmpCHDSDr,1,true) then begin
+		  TmpCHDSDr.POSerNr = RepSpec.f3;
+		  TmpCHDSDr.TransDate = CurrentDate;
+			TmpCHDSDr.TransTime = CurrentTime;
+		  if RecordStore(TmpCHDSDr,true) then begin end;
+    end;
+
+    CloseWindow(wn);
+    RepSpec.f3 = "";
+    nwn = OpenWindow("CreatePU2WClass",1,0,"","",RepSpec);
+  end;
+
+  LCreatePU_Window2:;
+  return;
+end;
+
+global
+updating procedure CreatePU3Sm()
+begin
+	integer wn;
+	time t;
+
+	wn = CurWindow;
+	t = CurrentTime;
+  NewTimedTask("CreatePU_GoWindow3","CreatePU_GoWindow3","CreatePU_GoWindow3",wn,CurrentDate,t,"","");
+
+  return;
+end;
+
+global
+updating function Boolean CreatePU2WClassOnEnterKey(Integer wn,string fieldname,Integer fn,Integer rownr)
+begin
+  Boolean res;
+  record RcVc RepSpec;
+
+  res = true;
+  GetWindowRecord(wn,RepSpec);
+  switch (fieldname) begin
+    case "f3":
+    	CreatePU3Sm;
+    	res = false;
+  end;
+
+  CreatePU2WClassOnEnterKey = res;
+  return;
+end;
+
+global
+updating procedure CreatePU_GoWindow3(string arg)
+begin
+	integer wn,nwn;
+	record RcVc RepSpec;
+	record INVc INr;
+	record TmpCHDSDVc TmpCHDSDr;
+	row TmpCHDSDVc TmpCHDSDrw;
+	integer rownr;
+
+  wn = FindWindow("CreatePU2WClass");
+  if (wn > 0) then begin
+  	DeselectWindow(wn,true);
+		GetWindowRecord(wn,RepSpec);
+
+		if blank(RepSpec.f3) then begin
+			//SetLangMode(LangLatvian,"LAT",1);
+    	MessageBox(0,"Jānorāda art.nr!");
+    	WindowFieldGoto(wn,RepSpec,-1,"f3",false);
+    	goto LCreatePU_GoWindow3;
+		end;
+
+		if !(GetFirstItem(RepSpec.f3,INr)) then begin
+			//SetLangMode(LangLatvian,"LAT",1);
+    	MessageBox(0,"Art. neeksistē!");
+    	WindowFieldGoto(wn,RepSpec,-1,"f3",false);
+    	goto LCreatePU_GoWindow3;
+		end;
+
+		TmpCHDSDr.SerNr = StringToLongInt(RepSpec.f1);
+    if ReadFirstMain(TmpCHDSDr,1,true) then begin
+		  TmpCHDSDr.TransDate = CurrentDate;
+			TmpCHDSDr.TransTime = CurrentTime;
+
+			rownr = RepSpec.flags[0];
+			ClearRow(TmpCHDSDr,TmpCHDSDrw,1);
+			TmpCHDSDrw.BarCode = RepSpec.f3;
+			MatRowInsert(TmpCHDSDr,rownr,TmpCHDSDrw);
+			rownr = rownr + 1;
+			RepSpec.flags[0] = rownr;
+
+		  if RecordStore(TmpCHDSDr,true) then begin end;
+    end;
+
+    CloseWindow(wn);
+    RepSpec.f8 = INr.Unittext;
+    RepSpec.f9 = INr.Unittext2;
+    RepSpec.f11 = INr.Unittext3;
+    RepSpec.f12 = INr.Unittext4;
+    nwn = OpenWindow("CreatePU3WClass",1,0,"","",RepSpec);
+    WindowFieldGoto(nwn,RepSpec,-1,"f4",false);
+  end;
+
+  LCreatePU_GoWindow3:;
+  return;
+end;
+
+global
+updating procedure CreatePU4Sm()
+begin
+	integer wn;
+	time t;
+
+	wn = CurWindow;
+	t = CurrentTime;
+  NewTimedTask("CreatePU_GoWindow4","CreatePU_GoWindow4","CreatePU_GoWindow4",wn,CurrentDate,t,"","");
+
+  return;
+end;
+
+global
+updating function Boolean CreatePU3WClassOnEnterKey(Integer wn,string fieldname,Integer fn,Integer rownr)
+begin
+  Boolean res;
+  record RcVc RepSpec;
+
+  res = true;
+  GetWindowRecord(wn,RepSpec);
+  switch (fieldname) begin
+  	case "f7":
+  		if blank(RepSpec.f7) then begin
+	    	CreatePU4Sm;
+	    	res = false;
+	    end;
+    case "f10":
+    	CreatePU4Sm;
+    	res = false;
+  end;
+
+  CreatePU3WClassOnEnterKey = res;
+  return;
+end;
+
+function Boolean CreatePU3WClassfEFAfter(Integer wn,Integer rownr,Integer changed,integer unittype)
+begin
+	record RcVc RepSpec;
+	record INVc INr;
+	record MainStockBlock MSb;
+	val v1,v2,v3,v4
+
+	if (changed != 0) then begin
+		BlockLoad(MSb);
+
+  	DeselectWindow(wn,true);
+		GetWindowRecord(wn,RepSpec);
+
+		if GetFirstItem(RepSpec.f3,INr) then begin
+			v1 = StringToVal(RepSpec.f4,M45Val);
+			v2 = StringToVal(RepSpec.f5,M45Val);
+			v3 = StringToVal(RepSpec.f6,M45Val);
+			v4 = StringToVal(RepSpec.f7,M45Val);
+
+			switch (unittype) begin
+    		case 1:
+    			if (MSb.UnitConvCalc==0) then begin
+			      v2 = INr.UnitCoefficient * v1;
+			      v3 = INr.UnitCoefficient3 * v1;
+			      v4 = INr.UnitCoefficient4 * v1;
+			    end else begin
+			      v2 = v1 / INr.UnitCoefficient;
+			      v3 = v1 / INr.UnitCoefficient3;
+			      v4 = v1 / INr.UnitCoefficient4;
+			    end;
+    		case 2:
+    			if (MSb.UnitConvCalc==0) then begin
+			      v1 = v2 / INr.UnitCoefficient;
+			      v3 = INr.UnitCoefficient3 * v1;
+			      v4 = INr.UnitCoefficient4 * v1;
+			    end else begin
+			      v1 = v2 * INr.UnitCoefficient;
+			      v3 = v1 / INr.UnitCoefficient3;
+			      v4 = v1 / INr.UnitCoefficient4;
+			    end;
+			  case 3:
+    			if (MSb.UnitConvCalc==0) then begin
+			      v1 = v3 / INr.UnitCoefficient3;
+			      v2 = INr.UnitCoefficient * v1;
+			      v4 = INr.UnitCoefficient4 * v1;
+			    end else begin
+			      v1 = v3 * INr.UnitCoefficient3;
+			      v2 = v1 / INr.UnitCoefficient;
+			      v4 = v1 / INr.UnitCoefficient4;
+			    end;
+			  case 4:
+    			if (MSb.UnitConvCalc==0) then begin
+			      v1 = v4 / INr.UnitCoefficient4;
+			      v2 = INr.UnitCoefficient * v1;
+			      v3 = INr.UnitCoefficient3 * v1;
+			    end else begin
+			      v1 = v4 * INr.UnitCoefficient4;
+			      v2 = v1 / INr.UnitCoefficient;
+			      v3 = v1 / INr.UnitCoefficient3;
+			    end;
+    	end;
+
+    	RepSpec.f4 = ValToString(v1,M45Val,"",".",0);
+    	RepSpec.f5 = ValToString(v2,M45Val,"",".",0);
+    	RepSpec.f6 = ValToString(v3,M45Val,"",".",0);
+    	RepSpec.f7 = ValToString(v4,M45Val,"",".",0);
+
+    	PutWindowRecord(wn,RepSpec);
+		end;
+	end;
+
+  CreatePU3WClassfEFAfter = false;
+  return;
+end;
+
+global
+updating function Boolean CreatePU3WClassAfterEditField(Integer wn,string fieldname,Integer fn, Integer rownr,Integer changed)
+begin
+  Boolean res;
+
+  switch (fieldname) begin
+    case "f4": res = CreatePU3WClassfEFAfter(wn,rownr,changed,1);
+    case "f5": res = CreatePU3WClassfEFAfter(wn,rownr,changed,2);
+    case "f6": res = CreatePU3WClassfEFAfter(wn,rownr,changed,3);
+    case "f7": res = CreatePU3WClassfEFAfter(wn,rownr,changed,4);
+  end;
+
+  CreatePU3WClassAfterEditField = res;
+  return;
+end;
+
+global
+updating procedure CreatePU_GoWindow4(string arg)
+begin
+	integer wn,nwn;
+	record RcVc RepSpec;
+	record INVc INr;
+	record TmpCHDSDVc TmpCHDSDr;
+	row TmpCHDSDVc TmpCHDSDrw;
+	integer rownr;
+
+  wn = FindWindow("CreatePU3WClass");
+  if (wn > 0) then begin
+  	DeselectWindow(wn,true);
+		GetWindowRecord(wn,RepSpec);
+
+		TmpCHDSDr.SerNr = StringToLongInt(RepSpec.f1);
+    if ReadFirstMain(TmpCHDSDr,1,true) then begin
+		  TmpCHDSDr.TransDate = CurrentDate;
+			TmpCHDSDr.TransTime = CurrentTime;
+
+			rownr = RepSpec.flags[0] - 1;
+			MatRowGet(TmpCHDSDr,rownr,TmpCHDSDrw);
+			TmpCHDSDrw.Quant1 = StringToVal(RepSpec.f4,M45Val);
+			TmpCHDSDrw.Quant2 = StringToVal(RepSpec.f5,M45Val);
+			TmpCHDSDrw.Quant3 = StringToVal(RepSpec.f6,M45Val);
+			TmpCHDSDrw.Quant4 = StringToVal(RepSpec.f7,M45Val);
+			MatRowPut(TmpCHDSDr,rownr,TmpCHDSDrw);
+
+		  if RecordStore(TmpCHDSDr,true) then begin end;
+    end;
+
+    CloseWindow(wn);
+    RepSpec.f3 = "";
+    RepSpec.f4 = "";
+    RepSpec.f5 = "";
+    RepSpec.f6 = "";
+    RepSpec.f7 = "";
+    RepSpec.f8 = "";
+    RepSpec.f9 = "";
+    RepSpec.f11 = "";
+    RepSpec.f12 = "";
+    nwn = OpenWindow("CreatePU4WClass",1,0,"","",RepSpec);
+  end;
+
+  LCreatePU_GoWindow4:;
+  return;
+end;
+
+global
+updating procedure CreatePUNextSm()
+begin
+	integer wn;
+	time t;
+
+	wn = CurWindow;
+	t = CurrentTime;
+  NewTimedTask("CreatePU_GoWindowNext","CreatePU_GoWindowNext","CreatePU_GoWindowNext",wn,CurrentDate,t,"","");
+
+  return;
+end;
+
+global
+updating procedure CreatePU_GoWindowNext(string arg)
+begin
+	integer wn,nwn;
+	record RcVc RepSpec;
+	record INVc INr;
+	record TmpCHDSDVc TmpCHDSDr;
+	row TmpCHDSDVc TmpCHDSDrw;
+	integer rownr;
+
+  wn = FindWindow("CreatePU4WClass");
+  if (wn > 0) then begin
+  	DeselectWindow(wn,true);
+		GetWindowRecord(wn,RepSpec);
+
+		TmpCHDSDr.SerNr = StringToLongInt(RepSpec.f1);
+    if ReadFirstMain(TmpCHDSDr,1,true) then begin
+		  TmpCHDSDr.TransDate = CurrentDate;
+			TmpCHDSDr.TransTime = CurrentTime;
+
+			rownr = RepSpec.flags[0] - 1;
+			MatRowGet(TmpCHDSDr,rownr,TmpCHDSDrw);
+			TmpCHDSDrw.BestBeforeDate = RepSpec.d1;
+			TmpCHDSDrw.LotNr = RepSpec.f5;
+			TmpCHDSDrw.ManufactureDate = RepSpec.d2;
+			TmpCHDSDrw.PosNr = RepSpec.f7;
+			MatRowPut(TmpCHDSDr,rownr,TmpCHDSDrw);
+
+		  if RecordStore(TmpCHDSDr,true) then begin end;
+    end;
+
+    CloseWindow(wn);
+    RepSpec.d1 = "";
+    RepSpec.f5 = "";
+    RepSpec.d2 = "";
+    RepSpec.f7 = "";
+    nwn = OpenWindow("CreatePU2WClass",1,0,"","",RepSpec);
+  end;
+
+  LCreatePU_GoWindowNext:;
+  return;
+end;
+
+global
+updating procedure CreatePUEndSm()
+begin
+	integer wn;
+	time t;
+
+	wn = CurWindow;
+	t = CurrentTime;
+  NewTimedTask("CreatePU_GoWindowEnd","CreatePU_GoWindowEnd","CreatePU_GoWindowEnd",CurrentUser,CurrentDate,t,"","");
+
+  return;
+end;
+
+global
+updating procedure CreatePU_GoWindowEnd(string arg)
+begin
+	integer wn,nwn;
+	time t;
+	record RcVc RepSpec;
+	record INVc INr;
+	record TmpCHDSDVc TmpCHDSDr;
+	row TmpCHDSDVc TmpCHDSDrw;
+	integer rownr;
+	string 20 sernr;
+
+  wn = FindWindow("CreatePU4WClass");
+  if (wn > 0) then begin
+  	DeselectWindow(wn,true);
+		GetWindowRecord(wn,RepSpec);
+
+		TmpCHDSDr.SerNr = StringToLongInt(RepSpec.f1);
+    if ReadFirstMain(TmpCHDSDr,1,true) then begin
+		  TmpCHDSDr.TransDate = CurrentDate;
+			TmpCHDSDr.TransTime = CurrentTime;
+
+			rownr = RepSpec.flags[0] - 1;
+			MatRowGet(TmpCHDSDr,rownr,TmpCHDSDrw);
+			TmpCHDSDrw.BestBeforeDate = RepSpec.d1;
+			TmpCHDSDrw.LotNr = RepSpec.f5;
+			TmpCHDSDrw.ManufactureDate = RepSpec.d2;
+			TmpCHDSDrw.PosNr = RepSpec.f7;
+			MatRowPut(TmpCHDSDr,rownr,TmpCHDSDrw);
+
+		  if RecordStore(TmpCHDSDr,true) then begin end;
+    end;
+
+    CloseWindow(wn);
+    RepSpec.d1 = "";
+    RepSpec.f5 = "";
+    RepSpec.d2 = "";
+    RepSpec.f7 = "";
+    nwn = OpenWindow("CreatePUWaitWClass",1,0,"","",RepSpec);
+
+	 	RemoteCreateSDFromPO(TmpCHDSDr.SerNr);
+
+		// wildd 2016.01.21. 11:02:44 shadi neder, jo ja StartPUSm, tiek izsaukts caur NewTimedTask, tad CurrentUser atgriez tuksu vertibu, hansas bugs
+		//StartPUSm();
+
+	  // wildd 2016.01.20. 15:35:24 katram lietotajam bus unikals ieraksts, kas izveidojas ar visiem skenetajiem artikuliem
+	  RecordNew(TmpCHDSDr);
+	  TmpCHDSDr.SerNr = NextSerNr("TmpCHDSDVc",CurrentDate,-1,false,"");
+	  TmpCHDSDr.UserCode = arg;
+	  TmpCHDSDr.TransDate = CurrentDate;
+		TmpCHDSDr.TransTime = CurrentTime;
+	  if RecordStore(TmpCHDSDr,false) then begin end;
+
+		//t = CurrentTime;
+	  //NewTimedTask("CreatePU_GoWindow1","CreatePU_GoWindow1","CreatePU_GoWindow1",TmpCHDSDr.SerNr,CurrentDate,t,"","");
+	  sernr = TmpCHDSDr.SerNr;
+	  CreatePU_GoWindow1(sernr);
+  end;
+
+  LCreatePU_GoWindowEnd:;
+  return;
+end;
+
+/*global
+updating procedure CreatePU_GoWindowEnd2(string arg)
+begin
+	integer wn,nwn;
+	record RcVc RepSpec,RepSpec2;
+	record TmpCHDSDVc TmpCHDSDr;
+	time t;
+
+  wn = FindWindow("CreatePUWaitWClass");
+  if (wn > 0) then begin
+  	DeselectWindow(wn,true);
+  	GetWindowRecord(wn,RepSpec);
+  	//CloseWindow(wn);
+
+  	//nwn = OpenWindow("CreatePUWaitWClass",1,0,"","",RepSpec2);
+
+  	TmpCHDSDr.SerNr = StringToLongInt(RepSpec.f1);
+    if ReadFirstMain(TmpCHDSDr,1,true) then begin
+	  	RemoteCreateSDFromPO(TmpCHDSDr.SerNr);
+	  end;
+
+	  //wn = FindWindow("CreatePUWaitWClass");
+	  //if (wn > 0) then begin
+	  //  CloseWindow(wn);
+		//end;
+		CloseWindow(wn);
+
+		// wildd 2016.01.21. 11:02:44 shadi neder, jo ja StartPUSm, tiek izsaukts caur NewTimedTask, tad CurrentUser atgriez tuksu vertibu, hansas bugs
+		//StartPUSm();
+
+	  // wildd 2016.01.20. 15:35:24 katram lietotajam bus unikals ieraksts, kas izveidojas ar visiem skenetajiem artikuliem
+	  RecordNew(TmpCHDSDr);
+	  TmpCHDSDr.SerNr = NextSerNr("TmpCHDSDVc",CurrentDate,-1,false,"");
+	  TmpCHDSDr.UserCode = arg;
+	  TmpCHDSDr.TransDate = CurrentDate;
+		TmpCHDSDr.TransTime = CurrentTime;
+	  if RecordStore(TmpCHDSDr,false) then begin end;
+
+		t = CurrentTime;
+	  NewTimedTask("CreatePU_GoWindow1","CreatePU_GoWindow1","CreatePU_GoWindow1",TmpCHDSDr.SerNr,CurrentDate,t,"","");
+  end;
+
+  LCreatePU_GoWindowEnd2:;
+  return;
+end;*/
+
+global
+updating procedure CancelPUSm()
+begin
+	integer wn;
+	time t;
+
+	wn = CurWindow;
+	t = CurrentTime;
+  NewTimedTask("CreatePU_GoWindowCancel","CreatePU_GoWindowCancel","CreatePU_GoWindowCancel",wn,CurrentDate,t,"","");
+
+  return;
+end;
+
+global
+updating procedure CreatePU_GoWindowCancel(string arg)
+begin
+	integer wn,nwn;
+	time t;
+	record RcVc RepSpec;
+	record TmpCHDSDVc TmpCHDSDr;
+	row TmpCHDSDVc TmpCHDSDrw;
+
+  wn = FindWindow("CreatePU1WClass");
+  if (wn > 0) then begin
+  	DeselectWindow(wn,true);
+		GetWindowRecord(wn,RepSpec);
+
+		TmpCHDSDr.SerNr = StringToLongInt(RepSpec.f1);
+    if ReadFirstMain(TmpCHDSDr,1,true) then begin
+		  RecordDelete(TmpCHDSDr);
+      StepBack(TmpCHDSDr);
+    end;
+
+    CloseWindow(wn);
+  end;
+
+  LCreatePU_GoWindowCancel:;
+  return;
+end;

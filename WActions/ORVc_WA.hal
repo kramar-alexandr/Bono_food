@@ -1,0 +1,46 @@
+remote procedure ORVc_PasteSorting(var record ORVc);
+remote updating function longint EBS_ImportEDIOrdersRemote();
+
+function Boolean ORDClassSortingEFAfter(Integer wn,Integer changed)
+begin
+  record ORVc ORr;
+
+  if (changed!=0) then begin
+    GetWindowRecord(wn,ORr);
+    ORVc_PasteSorting(ORr);
+    PutWindowRecord(wn,ORr);
+  end;
+  ORDClassSortingEFAfter = true;
+  return;
+end;
+
+global updating
+procedure EBS_ImportEDIOrderssm()
+begin
+  longint msgcode;
+
+  msgcode = EBS_ImportEDIOrdersRemote();
+  if msgcode!=0 then begin
+    MessageBox(msgcode,"");
+  end;
+
+  UpdateBrowses("ORVc");
+  UpdateBrowses("ORXMLImpErrorVc");
+
+  return;
+end;
+
+global
+function Boolean ORDClassAfterEditField(Integer wn,string fieldname,Integer fn, Integer rownr,Integer changed)
+BEGIN
+  Boolean res;
+
+  res = inner.ORDClassAfterEditField(wn,fieldname,fn,rownr,changed);
+
+  Switch (fieldname) begin
+    case "Sorting": res = ORDClassSortingEFAfter(wn,changed);
+  end;
+
+  ORDClassAfterEditField = res;
+  return;
+end;

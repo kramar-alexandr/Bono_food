@@ -1,0 +1,54 @@
+event startup
+begin
+  SetLangMode(LangLatvian,"LAT",2);
+
+  Setting("Saņemšanu imp. - nepabeigtās saņemšanas (BMC)",TmpCHDSDLClass,modPO);
+
+	return;
+end;
+
+event definewindows
+begin
+	real i,h,h1,h2,h3,h4,h5,h6,v,vs,vm,hl,l,t,hs,f,v2;
+
+  SetLangMode(LangLatvian,"LAT",2);
+
+  WindowBegin("Saņemšanu imp. - nepabeigtās saņemšanas (BMC)",TmpCHDSDDClass,CGview,-);
+  SetWRect(20,80,800,500);
+  UseView(TmpCHDSDVc);
+  vs=20; h=75;
+  EditField(h,v=15,80,"Nr.",Normal,SerNr,false,0);
+  EditField(h+150,v,80,"Lietotājs",Normal,UserCode,false,0);
+  EditField(h+300,v,80,"Pasūtījums",Normal,POSerNr,false,0);
+  EditField(h,v+=vs,80,"Datums",Normal,TransDate,false,0);
+  EditField(h+150,v,80,"Laiks",Normal,TransTime,false,0);
+  MatrixBegin(4,v+=40,-32,-10,-,50);
+  MatCol(1,h1=24,"Svītru kods",0,BarCode,false,0);
+  MatCol(1,h1+=106,"Daudz 1",0,Quant1,true,0);
+  MatCol(1,h1+=70,"Daudz 2",0,Quant2,true,0);
+  MatCol(1,h1+=70,"Daudz 3",0,Quant3,true,0);
+  MatCol(1,h1+=70,"Daudz 4",0,Quant4,true,0);
+  MatCol(1,h1+=70,"Derīg. dat.",0,BestBeforeDate,false,0);
+  MatCol(1,h1+=80,"Partijas nr.",0,LotNr,false,0);
+  MatCol(1,h1+=100,"Raž. dat.",0,ManufactureDate,false,0);
+  MatCol(1,h1+=80,"Vieta",0,PosNr,false,0);
+  EndMatrix;
+  SpecialMenu("",'',0,"");
+  EndWindow;
+
+  WindowBegin("Saņemšanu imp. - nepabeigtās saņemšanas (BMC)",TmpCHDSDLClass,CGmlist,-);
+  SpawnClass(TmpCHDSDDClass);
+  Sizeable(-1,-1,0,0);
+  SetWRect(64,80,550,300);
+  UseView(TmpCHDSDVc);
+  RecordList(4,17,-20,-39);
+  RlColKey(4,4,"Nr.",SerNr,false,SerNr);
+  RlColKey(80,80,"Lietotājs",UserCode,false,UserCode);
+  RlCol(160,160,"Datums",TransDate,false);
+  RlCol(240,240,"Laiks",TransTime,false);
+  RlCol(320,320,"Pasūtījums",POSerNr,false);
+  SearchField("Meklēt");
+  EndWindow;
+
+  return;
+end;

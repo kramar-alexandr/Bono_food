@@ -1,0 +1,242 @@
+external inner procedure PasteFromSysList(Integer,Integer);
+remote procedure BLT_FileSClassOnOpen(var array string,var integer,string);
+remote procedure BLT_BoxItemsSClassOnOpen(var array string,var integer);
+remote procedure FillBLT_INSClass(string,string,string,string,string,var Array string,var Array string,var Array string,var Array string,var Array val,var Array val,var Integer);
+remote procedure FillBLT_INSClassPOVc(string,string,string,string,var Array string,var Array string,var Array string,var Array string,var Array val,var Array val,var Integer);
+remote procedure FillBLT_VESClass(string,string,string,var array string,var array string,var array string,var array string,var integer);
+
+global
+function boolean BLT_FileSClassOnOpenWindow(integer wn) begin
+  array string 255 arrStringList;
+  integer size,i,cnt,mwn,currow;
+  string 50 fieldname;
+
+  mwn = MotherWindow(wn);
+  BLT_FileSClassOnOpen(arrStringList,size,GetWindowClass(mwn));
+  for(i=0;i<size;i=i+1)begin
+    SetListString(wn,cnt,arrStringList[i],false);
+    cnt = cnt + 1;
+  end;
+
+return;
+end;
+
+global
+function Boolean BLT_FileSClassOnOKWindow(Integer wn)
+begin
+
+  PasteFromSysList(wn,255);
+  BLT_FileSClassOnOKWindow = false;
+  return;
+end;
+
+global
+function boolean BLT_BoxItemsSClassOnOpenWindow(integer wn) begin
+  array string 255 arrStringList;
+  integer size,i,cnt,mwn,currow;
+  string 50 fieldname;
+
+  mwn = MotherWindow(wn);
+  BLT_BoxItemsSClassOnOpen(arrStringList,size);
+  for(i=0;i<size;i=i+1)begin
+    SetListString(wn,cnt,arrStringList[i],false);
+    cnt = cnt + 1;
+  end;
+
+return;
+end;
+
+global
+function Boolean BLT_BoxItemsSClassOnOKWindow(Integer wn)
+begin
+
+  PasteFromSysList(wn,-2);
+  BLT_BoxItemsSClassOnOKWindow = false;
+  return;
+end;
+
+procedure BLT_INStringListRow(Integer wn,string tag,string code,string group,string  description,string alternativecode,val uprice1,val instock)
+begin
+  string 255 tstr;
+  val v
+
+  AddListRow(wn,"item_in_pricelist",1,tag,0);
+  AddListData(wn,"item_in_pricelist","code",code);
+  AddListData(wn,"item_in_pricelist","group",group);
+  AddListData(wn,"item_in_pricelist","description",description);
+  AddListData(wn,"item_in_pricelist","alternativecode",alternativecode);
+  AddListData(wn,"item_in_pricelist","uprice1",uprice1);
+  AddListData(wn,"item_in_pricelist","instock",instock);
+  return;
+end;
+
+procedure IVVc_BLT_INSClass(string index,string sorting,Integer mwn,
+                           var Array string acode,var Array string agroup,var Array string adesc,
+                           var Array string aaltcode,var Array val auprice,var Array val ainstock,
+                           var Integer acnt)
+begin
+  record IVVc IVr;
+
+  GetWindowRecord(mwn,IVr);
+  FillBLT_INSClass(index,sorting,IVr.PriceList,IVr.Location,IVr.CustCode,acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+  return;
+end;
+
+procedure ORVc_BLT_INSClass(string index,string sorting,Integer mwn,
+                           var Array string acode,var Array string agroup,var Array string adesc,
+                           var Array string aaltcode,var Array val auprice,var Array val ainstock,
+                           var Integer acnt)
+begin
+  record ORVc ORr;
+
+  GetWindowRecord(mwn,ORr);
+  FillBLT_INSClass(index,sorting,Orr.PriceList,ORr.Location,ORr.CustCode,acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+  return;
+end;
+
+procedure SalesForecastVc_BLT_INSClass(string index,string sorting,Integer mwn,
+                           var Array string acode,var Array string agroup,var Array string adesc,
+                           var Array string aaltcode,var Array val auprice,var Array val ainstock,
+                           var Integer acnt)
+begin
+  record SalesForecastVc SFr;
+  record CUVc CUr;
+
+  GetWindowRecord(mwn,SFr);
+  if nonblank(SFr.BLT_CustCode) then begin
+    CUr.Code = SFr.BLT_CustCode;
+    if ReadFirstMain(CUr,1,true) then begin
+      FillBLT_INSClass(index,sorting,CUr.PLCode,"",CUr.Code,acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+    end;
+  end;
+  return;
+end;
+
+procedure POVc_BLT_INSClass(string index,string sorting,Integer mwn,
+                           var Array string acode,var Array string agroup,var Array string adesc,
+                           var Array string aaltcode,var Array val auprice,var Array val ainstock,
+                           var Integer acnt)
+begin
+  record POVc POr;
+
+  GetWindowRecord(mwn,POr);
+  FillBLT_INSClassPOVc(index,sorting,POr.VECode,"",acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+  return;
+end;
+
+procedure BLT_INSClassOnOpen(string index,string sorting,Integer wn)
+begin
+  Integer mwn;
+  Array string 255 acode,agroup,adesc,aaltcode;
+  Array val auprice,ainstock;
+  Integer i,acnt;
+
+  mwn = MotherWindow(wn);
+  switch (GetWindowFileName(mwn)) begin
+    case "IVVc": IVVc_BLT_INSClass(index,sorting,mwn,acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+    case "ORVc": ORVc_BLT_INSClass(index,sorting,mwn,acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+    case "POVc": POVc_BLT_INSClass(index,sorting,mwn,acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+    case "SalesForecastVc": SalesForecastVc_BLT_INSClass(index,sorting,mwn,acode,agroup,adesc,aaltcode,auprice,ainstock,acnt);
+  end;
+  ClearStringList(wn);
+  for (i=0;i<acnt;i=i+1) begin
+    BLT_INStringListRow(wn,acode[i],acode[i],agroup[i],adesc[i],aaltcode[i],auprice[i],ainstock[i]);
+  end;
+  SetSelectedListLine(wn,0);
+  return;
+end;
+
+global
+function Boolean BLT_INSClassOnOpenWindow(Integer wn)
+begin
+  BLT_INSClassOnOpen("CustCode","",wn);
+  BLT_INSClassOnOpenWindow = false;
+  return;
+end;
+
+global
+function Boolean BLT_INSClassOnOKWindow(Integer wn)
+begin
+  PasteFromSysList(wn,-2);
+  BLT_INSClassOnOKWindow = false;
+  return;
+end;
+
+global
+procedure BLT_INSClassShowAllItemsBtn()
+begin
+  Integer wn,mwn,nwn;
+  record INVc INr;
+
+  wn = CurWindow;
+  mwn = MotherWindow(wn);
+  CloseWindow(wn);
+  nwn = OpenWindow("INSClass",0,mwn,"","",INr);
+  return;
+end;
+
+procedure BLT_VEStringListRow(Integer wn,string tag,string code,string searchkey,string vecat,string name)
+begin
+  string 255 tstr;
+  val v
+
+  AddListRow(wn,"ve_in_pivc",1,tag,0);
+  AddListData(wn,"ve_in_pivc","code",code);
+  AddListData(wn,"ve_in_pivc","searchkey",searchkey);
+  AddListData(wn,"ve_in_pivc","vecat",vecat);
+  AddListData(wn,"ve_in_pivc","name",name);
+  return;
+end;
+
+procedure POPlanVc_BLT_VESClass(string index,string sorting,Integer mwn,
+                           var Array string acode,var Array string asearchkey,var Array string acat,
+                           var Array string aname, var Integer acnt)
+begin
+  record POPlanVc POPlanr;
+  row POPlanVc POPlanrw;
+  integer rownr;
+
+  GetWindowRecord(mwn,POPlanr);
+  rownr = WindowActiveRow(mwn);
+
+  if rownr >= 0 then begin
+    MatRowGet(POPlanr,rownr,POPlanrw);
+    FillBLT_VESClass(index,sorting,POPlanrw.ItemCode,acode,asearchkey,acat,aname,acnt);
+  end;
+
+  return;
+end;
+
+procedure BLT_VESClassOnOpen(string index,string sorting,Integer wn)
+begin
+  Integer mwn;
+  Array string 255 acode,asearchkey,aname,acat;
+  Integer i,acnt;
+
+  mwn = MotherWindow(wn);
+  switch (GetWindowFileName(mwn)) begin
+    case "POPlanVc": POPlanVc_BLT_VESClass(index,sorting,mwn,acode,asearchkey,acat,aname,acnt);
+  end;
+  ClearStringList(wn);
+  for (i=0;i<acnt;i=i+1) begin
+    BLT_VEStringListRow(wn,acode[i],acode[i],asearchkey[i],acat[i],aname[i]);
+  end;
+  SetSelectedListLine(wn,0);
+  return;
+end;
+
+global
+function Boolean BLT_VESClassOnOpenWindow(Integer wn)
+begin
+  BLT_VESClassOnOpen("CustCode","",wn);
+  BLT_VESClassOnOpenWindow = false;
+  return;
+end;
+
+global
+function Boolean BLT_VESClassOnOKWindow(Integer wn)
+begin
+  PasteFromSysList(wn,-2);
+  BLT_VESClassOnOKWindow = false;
+  return;
+end;

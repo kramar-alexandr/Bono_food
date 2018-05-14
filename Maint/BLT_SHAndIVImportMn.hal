@@ -1,0 +1,708 @@
+external inner procedure SHVc_PasteSerialNr(var record SHVc,Integer,var string);
+external inner procedure IVVc_PastePayDeal(var record IVVc,string,string);
+external inner procedure IVVc_PasteInvDate(var record IVVc,record LocalMachineBlock,var Integer,var Integer);
+external inner procedure IVVc_PasteTransDate(var record IVVc,var Integer,var Integer);
+external inner function val StringToValue(string,Integer,string,string);
+external inner function boolean IsNumeric(string);
+external inner updating function LongInt RecordAction_raPasteOrdInShip2(var record SHVc,LongInt,var string);
+external inner function date XmlGetDate(var xml,string,string);
+external inner function val GetStockQty2(string,string,Date,Boolean,Integer);
+external inner procedure SHVc_PasteShip(var record SHVc,var Integer);
+external inner procedure SHSumUp(var record SHVc);
+external inner procedure RefillShipment(var record SHVc,record SHVc);
+external inner function string 20 FindCustRoute(string,string,string);
+external inner procedure FindBatchBestBeforeDate(string,string,var Date);
+external inner updating function Integer PasteSHInInvoice(record SHVc,var record IVVc);
+external inner procedure IVVc_PastePrice(var record IVVc,record IVVc,Integer,var string);
+external inner function string 255 ReturnItemCodeFromBarCode(string);
+
+// global
+// procedure BLT_SHAndIVImportVClassReportDefaults(Integer wn)
+// begin
+//   record RcVc RepSpec;
+//
+//   DeselectWindow(wn,false);
+//   GetWindowRecord(wn,RepSpec);
+//   ReportDefaults(RepSpec,"BLT_SHAndIVImportVClass");
+//
+//
+// return;
+// end;
+
+// global
+// function boolean BLT_SHAndIVImportVClassOnOKWindow(integer wn)
+// begin
+//   record RcVc RepSpec;
+//   boolean res;
+//
+//   res = true;
+//   GetWindowRecord(wn,RepSpec);
+//
+// LBLT_SHAndIVImportVClassOnOKWindow:;
+//   BLT_SHAndIVImportVClassOnOKWindow = res;
+//   return;
+// end;
+
+procedure GetSerialNrBestBeforeArray(string location,string itemcode, val quant, date bestbefore, var record SMVc resCacher,record SHVc SHr,integer rownr)
+begin
+  record SMVc Cacher;
+  row SMVc Cacherw,resCacherw;
+  row SHVc SHrw;
+  record SerBalVc SerBalr;
+  boolean wloop;
+  date ser_bestbefore;
+  integer i,rwc;
+  val rem_quant,q;
+
+  RecordNew(resCacher);
+
+  SerBalr.Location = location;
+  SerBalr.Item = itemcode;
+  wloop = true;
+  While LoopKey("ItemQuant",SerBalr,2,wloop) begin
+    if SerBalr.Location != location or SerBalr.Item != itemcode then begin
+      wloop = false;
+    end else begin
+      q = SerBalr.Quant;
+      rwc = MatRowCnt(SHr);
+      for (i=rownr+1;i<rwc;i=i+1)begin
+        MatRowGet(SHr,i,SHrw);
+        if SHrw.ArtCode == itemcode and SHrw.SerialNr == SerBalr.Serial then begin
+          q = q - SHrw.Ship;
+        end;
+      end;
+
+      if q>0 then begin
+        FindBatchBestBeforeDate(itemcode,SerBalr.Serial,ser_bestbefore);
+        Cacherw.TransDate = ser_bestbefore;
+        Cacherw.Comment = SerBalr.Serial;
+        Cacherw.DebVal = q;
+        MatRowPut(Cacher,MatRowCnt(Cacher),Cacherw);
+        // LogText(0,"item=" & itemcode & " ser=" & SerBalr.Serial & " best=" & ser_bestbefore & " q=" & SerBalr.Quant);
+      end;
+    end;
+  end;
+
+  rem_quant = quant;
+  SortRows(Cacher,"TransDate",true);
+  rwc = MatRowCnt(Cacher);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(Cacher,i,Cacherw);
+    if Cacherw.TransDate > bestbefore then begin
+      i = rwc;
+    end;
+    if Cacherw.TransDate == bestbefore then begin
+      if Cacherw.DebVal >= rem_quant then begin
+        resCacherw.DebVal = rem_quant;
+        resCacherw.Comment = Cacherw.Comment;
+        MatRowPut(resCacher,MatRowCnt(resCacher),resCacherw);
+        rem_quant = 0;
+        i = rwc;
+      end else begin
+        resCacherw.DebVal = Cacherw.DebVal;
+        resCacherw.Comment = Cacherw.Comment;
+        MatRowPut(resCacher,MatRowCnt(resCacher),resCacherw);
+        rem_quant = rem_quant - Cacherw.DebVal;
+      end;
+    end;
+  end;
+
+  if rem_quant > 0 then begin
+    rwc = MatRowCnt(Cacher);
+    for(i=0;i<rwc;i=i+1)begin
+      MatRowGet(Cacher,i,Cacherw);
+      if Cacherw.TransDate != bestbefore then begin
+        if Cacherw.DebVal >= rem_quant then begin
+          resCacherw.DebVal = rem_quant;
+          resCacherw.Comment = Cacherw.Comment;
+          MatRowPut(resCacher,MatRowCnt(resCacher),resCacherw);
+          rem_quant = 0;
+          i = rwc;
+        end else begin
+          resCacherw.DebVal = Cacherw.DebVal;
+          resCacherw.Comment = Cacherw.Comment;
+          MatRowPut(resCacher,MatRowCnt(resCacher),resCacherw);
+          rem_quant = rem_quant - Cacherw.DebVal;
+        end;
+      end;
+    end;
+  end;
+
+  if rem_quant > 0 then begin
+    resCacherw.DebVal = rem_quant;
+    resCacherw.Comment = "";
+    MatRowPut(resCacher,MatRowCnt(resCacher),resCacherw);
+  end;
+
+  // rwc = MatRowCnt(resCacher);
+  // for(i=0;i<rwc;i=i+1)begin
+  //   MatRowGet(resCacher,i,Cacherw);
+  //   LogText(0,"row=" & i & " serial=" & Cacherw.Comment & " quant=" & Cacherw.DebVal & " source_row=" & rownr & " source_qty=" & quant);
+  // end;
+
+  return;
+end;
+
+function date CheckAndConvertDate(string impstr)
+begin
+  date td;
+	string 255 temp;
+
+	temp = impstr;
+	if (IsNumeric(Left(temp,4))) then begin
+		// day
+    td.day = StringToInt(Right(temp,2));
+		temp = Left(temp,7);
+		// month
+    td.month = StringToInt(Right(temp,2));
+		temp = Left(temp,4);
+		// year
+		td.year = StringToInt(temp);
+	end;
+
+  CheckAndConvertDate = td;
+	return;
+end;
+
+function string 255 OR_Match_Series_prefix(string tstr)
+begin
+  record ORSerBlock ORSerbl;
+  row ORSerBlock ORSerrw;
+  integer i,rwc;
+  string 255 res,tstr2;
+  longint l;
+
+  res = tstr;
+  BlockLoad(ORSerbl);
+  rwc = MatRowCnt(ORSerbl);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(ORSerbl,i,ORSerrw);
+    if nonblank(ORSerrw.ExpPrefix) then begin
+      if len(tstr) > len(ORSerrw.ExpPrefix) and left(tstr,len(ORSerrw.ExpPrefix)) == ORSerrw.ExpPrefix then begin
+        tstr2 = right(tstr, len(tstr) - len(ORSerrw.ExpPrefix));
+        if isNumeric(tstr2) then begin
+          l = StringToLongInt(tstr2);
+          if l >= ORSerrw.TSerStart and l<=ORSerrw.TSerEnd then begin
+            res = l;
+            i = rwc;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  OR_Match_Series_prefix = res;
+  return;
+end;
+
+function val Custom_StringToValue(string sourcestr, string decimal)
+begin
+  val res,t;
+  integer i;
+  string 255 tstr,tstr2;
+  boolean foundf;
+
+  for (i=0;i<len(sourcestr);i=i+1) begin
+    if mid(sourcestr,i,1) == decimal then begin
+      foundf = true;
+      tstr = Left(sourcestr,i);
+      tstr2 = Right(sourcestr,len(sourcestr)-i-1);
+      LogText(0,"tstr=" & tstr & " tstr2=" & tstr2);
+      res = StringToInt(tstr);
+      t = StringToInt(tstr2) / Power(10, len(tstr2));
+      res = res + t;
+    end;
+  end;
+
+  if !foundf then begin
+    LogText(0,"Custom_StringToValue :: Could not find decimal seperator in " & sourcestr);
+    res = StringToInt(sourcestr);
+  end;
+
+  Custom_StringToValue = res;
+  return;
+end;
+
+updating
+function longint ImportSHAndIV_OneFile(string filename, record InvBalXMLExpFolBlock EdiSetr, string period_str)
+begin
+  record LocationVc Locr;
+  record INVc INr;
+  record SMVc Cacher;
+  row SMVc Cacherw;
+  array string 255 arrItem;
+  array val arrQuant, arrPrice;
+  array date arrBestBefore;
+  array integer arrSerialTypes;
+  longint res,r;
+  xml xData;
+  string 255 xpath, tstr, warning, rootnode, itemcode;
+  record ORVc ORr;
+  record SHVc oldSHr,SHr,SH2r;
+  row SHVc SHrw, SH2rw;
+  record IVVc oldIVr,IVr;
+  row IVVc IVrw;
+  integer a,i,rwc,i2,rwc2,newrownr,array_index;
+  val rem_qty, ship_qty,t;
+  boolean foundf,addedf;
+  Integer err1,err2;
+  record LocalMachineBlock LMb;
+  date from_date, to_date, td;
+
+  if (SetImportCodepage("UTF-8")) then begin end;
+  xData = ParseXmlFile(filename);
+
+  if nonblank(period_str) then begin
+    from_date = StringToDate(FirstInRange(period_str,10));
+    to_date = StringToDate(LastInRange(period_str,10));
+    td = XmlGetDate(xData,"ns0:Document-Invoice/Invoice-Header/Delivery/DeliveryDate","YYYY-MM-DD");
+    if !DateInRange(td,from_date,to_date) then begin
+      LogText(0,"ImportSHAndIV_OneFile INFO :: Ignoring file because ship date does not match import period");
+      res = 3;
+      GoTo LImportSHAndIV_OneFile;
+    end;
+  end;
+
+  xpath = "ns0:Document-Invoice/Document/Receiver-Party/ILN";
+  tstr = XMLGet(xData,xpath);
+
+  if (XmlNodeExists(xData,"ns0:Document-Invoice") == false) then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: File has no Document-Invoice tag (namespace must be ns0)");
+    res = 1;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  xpath = "ns0:Document-Invoice/Document/Receiver-Party/ILN";
+  tstr = XMLGet(xData,xpath);
+  if blank(tstr) then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: File has no Receiver-Party/ILN tag");
+    res = 2;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  if EdiSetr.LogisticCustCode != tstr then begin
+    LogText(0,"ImportSHAndIV_OneFile INFO :: File has different Receiver-Party/ILN than in setting");
+    res = 3;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  xpath = "ns0:Document-Invoice/Invoice-Header/Order/BuyerOrderNumber";
+  tstr = XMLGet(xData,xpath);
+  if blank(tstr) then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: blank BuyerOrderNumber tag");
+    res = 4;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  LogText(0,"ImportSHAndIV_OneFile INFO :: Trying to match series prefix for number " & tstr);
+  tstr = OR_Match_Series_prefix(tstr);
+  LogText(0,"ImportSHAndIV_OneFile INFO :: ORVc number after prefix matching " & tstr);
+
+  ORr.SerNr = StringToLongInt(tstr);
+  if !ReadFirstMain(ORr,1,true) then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: sales order could not be found with number " & tstr);
+    res = 5;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  if (ORr.Closed!=0) then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: sales order is closed. Sales order number " & ORr.SerNr);
+    res = 6;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  xpath = "ns0:Document-Invoice/Invoice-Parties/Warehouse/ILN";
+  tstr = XMLGet(xData,xpath);
+  if blank(tstr) then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: blank Warehouse ILN tag");
+    res = 8;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  Locr.LocationCode = tstr;
+  if !ReadFirstKey("LocationCode",Locr,1,true) then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: No location could be found for location code " & tstr);
+    res = 9;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  RecordCopy(oldSHr,SHr);
+  i = 0;
+  rootnode = "ns0:Document-Invoice/Invoice-Lines/Line";
+  While (XmlNodeExists(xData,rootnode & "[" & i & "]")) begin
+    tstr = XmlGet(xData, rootnode & "[" & i & "]" & "/Line-Item/SupplierItemCode");
+    itemcode = ReturnItemCodeFromBarCode(tstr);
+    if blank(itemcode) then begin
+      LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not find item with barcode " & tstr);
+      res = 10;
+      GoTo LImportSHAndIV_OneFile;
+    end;
+
+    INr.Code = itemcode;
+    if !ReadFirstMain(INr,1,true) then begin
+      LogText(0,"ImportSHAndIV_OneFile ERROR :: Item for barcode " & tstr & " does not exist");
+      res = 10;
+      GoTo LImportSHAndIV_OneFile;
+    end;
+
+    a = arrItem.length;
+    arrItem[a] = INr.Code;
+    arrQuant[a] = StringToValue(XmlGet(xData, rootnode & "[" & i & "]" & "/Line-Item/InvoiceQuantity"),M4UVal,"",".");
+    // this is weird shit, stringtovalue looses decimal and 2.33 becomes 233.00
+    // arrPrice[a] = StringToValue(XmlGet(xData, rootnode & "[" & i & "]" & "/Line-Item/InvoiceUnitNetPrice"),M4UVal,"",".");
+    tstr = XmlGet(xData, rootnode & "[" & i & "]" & "/Line-Item/InvoiceUnitNetPrice");
+    t = Custom_StringToValue(tstr,".");
+    arrPrice[a] = t;
+
+    arrBestBefore[a] = XmlGetDate(xData,rootnode & "[" & i & "]" & "/Line-Item/BestBefore","YYYY-MM-DD");
+    arrSerialTypes[a] = INr.SerNrf;
+    i = i + 1;
+    LogText(0,"Adding to Array Item=" & INr.Code & " Price=" & arrPrice[a] & " file row=" & i & " read value from file=" & tstr & " parsed value=" & t);
+  end;
+
+  warning = "EDI IMPORT";
+  r = RecordAction_raPasteOrdInShip2(SHr,ORr.SerNr,warning);
+  if r!=0 then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not create delivery note from order, erorr number " & r & ", order number " & ORr.SerNr);
+    res = 7;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  RecordCopy(SH2r,SHr);
+  SHr.ShipDate = XmlGetDate(xData,"ns0:Document-Invoice/Invoice-Header/Delivery/DeliveryDate","YYYY-MM-DD");
+  if SHr.Location != Locr.Code then begin
+    SHr.Location = Locr.Code;
+    RefillShipment(SHr,SH2r);
+    SHr.Sorting = FindCustRoute(SHr.CustCode,SHr.Location,SHr.DelAddrCode);
+    SHSumUp(SHr);
+  end;
+
+  //remove duplicate rows, as serial numbers and quantities will be repasted
+  rwc = MatRowCnt(SHr);
+  LogText(0,"Mat row cnt 1 = " & rwc);
+  for (i=rwc-1;i>0;i=i-1) begin
+    MatRowGet(SHr,i,SHrw);
+    MatRowGet(SHr,i-1,SH2rw);
+    LogText(0,"SHrw.OrdRow=" & SHrw.OrdRow & " SH2rw.OrdRow=" & SH2rw.OrdRow & " i=" & i);
+    if SHrw.OrdRow == SH2rw.OrdRow then begin
+      LogText(0,"Removing duplicate row from sh " & i);
+      MatRowDelete(SHr,i);
+    end;
+  end;
+
+  // First divide items from EDI file, EDI file may have multiple lines
+  // for one line in sales order
+  rwc = MatRowCnt(SHr);
+  LogText(0,"Mat row cnt = " & rwc);
+  for (i=rwc-1;i>=0;i=i-1) begin
+    MatRowGet(SHr,i,SHrw);
+    rem_qty = SHrw.Ordered;
+    addedf = true;
+    newrownr = i;
+    while rem_qty > 0 and addedf begin
+      addedf = false;
+      LogText(0,"rem_qty=" & rem_qty & " i=" & i & " SHrw.ArtCode=" & SHrw.ArtCode);
+      for (a=0;a<arrItem.length;a=a+1) begin
+        LogText(0,"rem_qty=" & rem_qty & " i=" & i & " SHrw.ArtCode=" & SHrw.ArtCode & " item=" & arrItem[a] & " arrQuant=" & arrQuant[a]);
+        if SHrw.ArtCode == arrItem[a] and arrQuant[a]>0 and rem_qty>0 then begin
+          if rem_qty >= arrQuant[a] then begin
+            ship_qty = arrQuant[a];
+          end else begin
+            ship_qty = rem_qty;
+          end;
+          arrQuant[a] = arrQuant[a] - ship_qty;
+          rem_qty = rem_qty - ship_qty;
+          LogText(0,"Adding quants, newrownr=" & newrownr & " ship_qty=" & ship_qty & " i=" & i);
+          if newrownr == i then begin
+            // First row use matrowput, replace existing row
+            SHrw.Ship = ship_qty;
+            SHrw.TAX2Acc = a;
+            MatRowPut(SHr,newrownr,SHrw);
+          end else begin
+            // Other rows use matrowinsert, adding new row
+            CopyRow(SHr,SHrw,SH2rw);
+            SH2rw.Ship = ship_qty;
+            SH2rw.TAX2Acc = a;
+            MatRowInsert(SHr,newrownr,SH2rw);
+          end;
+          SHVc_PasteShip(SHr,newrownr);
+          SHSumUp(SHr);
+          addedf = true;
+          newrownr = newrownr + 1;
+        end;
+      end;
+    end;
+  end;
+
+  // Check if file has more quantity than in shipment, in this case add it to shipment row
+  for (a=0;a<arrItem.length;a=a+1) begin
+    LogText(0,"Adding remaining quants, a=" & a & " arrQuant[a]=" & arrQuant[a]);
+    if arrQuant[a] > 0 then begin
+      rwc = MatRowCnt(SHr);
+      for(i=0;i<rwc;i=i+1)begin
+        MatRowGet(SHr,i,SHrw);
+        LogText(0,"Adding remaining quants 2, a=" & a & " arrQuant[a]=" & arrQuant[a] & " SHrw.TAX2Acc=" & SHrw.TAX2Acc);
+        if nonblank(SHrw.TAX2Acc) then begin
+          if StringToInt(SHrw.TAX2Acc) == a then begin
+            SHrw.Ship = SHrw.Ship + arrQuant[a];
+            arrQuant[a] = 0;
+            MatRowPut(SHr,i,SHrw);
+            SHVc_PasteShip(SHr,i);
+            SHSumUp(SHr);
+          end;
+        end;
+      end;
+
+      if arrQuant[a] > 0 then begin
+        LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not add surplus quantity " & arrQuant[a] & ", item=" & arrItem[a] & ", order=" & SHr.OrderNr);
+      end;
+    end;
+  end;
+
+  // for debug
+  // rwc = MatRowCnt(SHr);
+  // for(i=0;i<rwc;i=i+1)begin
+  //   MatRowGet(SHr,i,SHrw);
+  //   LogText(0,"RowNr=" & i & " item=" & SHrw.ArtCode & " orderrow=" & SHrw.OrdRow & " ordered=" & SHrw.Ordered & " ship=" & SHrw.Ship & " index=" & SHrw.TAX2Acc);
+  // end;
+
+  rwc = MatRowCnt(SHr);
+  for (i=rwc-1;i>=0;i=i-1) begin
+    MatRowGet(SHr,i,SHrw);
+
+    foundf = false;
+    if blank(SHrw.TAX2Acc) then begin
+      array_index = -1;
+    end else begin
+      array_index = StringToInt(SHrw.TAX2Acc);
+    end;
+    SHrw.TAX2Acc = "";
+    MatRowPut(SHr,i,SHrw);
+    // LogText(0,"RowNr=" & i & " item=" & SHrw.ArtCode & " orderrow=" & SHrw.OrdRow & " ordered=" & SHrw.Ordered & " ship=" & SHrw.Ship & " array_index=" & array_index);
+    if array_index>=0 then begin
+      foundf = True;
+      if arrSerialTypes[array_index] != 0 then begin
+        GetSerialNrBestBeforeArray(SHr.Location,SHrw.ArtCode,SHrw.Ship,arrBestBefore[array_index],Cacher,SHr,i);
+        rwc2 = MatRowCnt(Cacher);
+        for (i2=0;i2<rwc2;i2=i2+1) begin
+          MatRowGet(Cacher,i2,Cacherw);
+          if blank(Cacherw.Comment) then begin
+            LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not find serial number for item " & SHrw.ArtCode);
+            // RecordDelete(SHr);
+            res = 11;
+            GoTo LImportSHAndIV_OneFile;
+          end;
+          if i2 == 0 then begin
+            SHrw.SerialNr = Cacherw.Comment;
+            MatRowPut(SHr,i,SHrw);
+            SHVc_PasteSerialNr(SHr,i,warning);
+            MatRowGet(SHr,i,SHrw);
+            if SHrw.Ship != Cacherw.DebVal then begin
+              SHrw.Ship = Cacherw.DebVal;
+              MatRowPut(SHr,i,SHrw);
+              SHVc_PasteShip(SHr,i);
+              SHSumUp(SHr);
+            end;
+            SHrw.BestBefore = arrBestBefore[array_index];
+            MatRowPut(SHr,i,SHrw);
+          end;
+          if i2 != 0 then begin
+            newrownr = i + 1;
+            CopyRow(SHr,SHrw,SH2rw);
+            SH2rw.SerialNr = Cacherw.Comment;
+            MatRowInsert(SHr,newrownr,SH2rw);
+            SHVc_PasteSerialNr(SHr,newrownr,warning);
+            MatRowGet(SHr,newrownr,SH2rw);
+            SH2rw.Ship = Cacherw.DebVal;
+            MatRowPut(SHr,newrownr,SH2rw);
+            SHVc_PasteShip(SHr,newrownr);
+            SH2rw.BestBefore = arrBestBefore[array_index];
+            MatRowPut(SHr,newrownr,SH2rw);
+            SHSumUp(SHr);
+          end;
+        end;
+      end;
+    end;
+
+    if !foundf then begin
+      MatRowDelete(SHr,i);
+    end;
+  end;
+
+  // for debug
+  // rwc = MatRowCnt(SHr);
+  // for(i=0;i<rwc;i=i+1)begin
+  //   MatRowGet(SHr,i,SHrw);
+  //   LogText(0,"RowNr=" & i & " item=" & SHrw.ArtCode & " orderrow=" & SHrw.OrdRow & " ordered=" & SHrw.Ordered & " ship=" & SHrw.Ship);
+  // end;
+
+  if RecordUpdate(SH2r,SHr,true)!=0 then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not update SHVc record " & SHr.OrderNr);
+    // RecordDelete(SHr);
+    res = 12;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  // RecordCopy(SH2r,SHr);
+  // SHr.OKFlag = 1;
+  // if RecordUpdate(SH2r,SHr,true)!=0 then begin
+  //   LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not OK SHVc record " & SHr.OrderNr);
+  //   // RecordDelete(SHr);
+  //   res = 13;
+  //   GoTo LImportSHAndIV_OneFile;
+  // end;
+
+  //Create invoice from shvc
+  r = PasteSHInInvoice(SHr,IVr);
+  if r!=0 then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not create invoice from delivery note record " & SHr.SerNr);
+    // RecordDelete(SHr);
+    res = 14;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  RecordCopy(oldIVr,IVr);
+  IVr.InvDate = XmlGetDate(xData,"ns0:Document-Invoice/Invoice-Header/InvoiceDate","YYYY-MM-DD");
+  IVVc_PasteInvDate(IVr,LMb,err1,err2);
+
+  IVr.TransDate = IVr.InvDate;
+  IVVc_PasteTransDate(IVr,err1,err2);
+
+  IVr.ServiceDelDate = XmlGetDate(xData,"ns0:Document-Invoice/Invoice-Header/SalesDate","YYYY-MM-DD");
+  tstr = IVr.PayDeal;
+  IVr.PayDeal = XmlGet(xData, "ns0:Document-Invoice/Invoice-Header/InvoicePaymentTerms");
+  IVVc_PastePayDeal(IVr,tstr,"");
+  IVr.CustOrdNr = XmlGet(xData, "ns0:Document-Invoice/Invoice-Header/Remarks");
+
+  rwc = MatRowCnt(IVr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(IVr,i,IVrw);
+    for (a=0;a<arrItem.length;a=a+1) begin
+      if IVrw.ArtCode == arrItem[a] then begin
+        if IVrw.Price != arrPrice[a] then begin
+          IVrw.Price = arrPrice[a];
+          MatRowPut(IVr,i,IVrw);
+          IVVc_PastePrice(IVr,IVr,i,warning);
+          LogText(0,"Pasting new price in Invoice row " & i & " new price=" & arrPrice[a]);
+        end;
+      end;
+    end;
+  end;
+
+  if RecordUpdate(oldIVr,IVr,true) !=0 then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not update invoice for delivery note " & SHr.SerNr);
+    res = 15;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  RecordCopy(oldIVr,IVr);
+  IVr.OKFlag = 1;
+  if RecordUpdate(oldIVr,IVr,true)!=0 then begin
+    LogText(0,"ImportSHAndIV_OneFile ERROR :: Could not OK invoice for delivery note " & SHr.SerNr);
+    res = 16;
+    GoTo LImportSHAndIV_OneFile;
+  end;
+
+  RecordCopy(oldIVr,IVr);
+  IVr.OfficialSerNr = XmlGet(xData, "ns0:Document-Invoice/Invoice-Header/InvoiceNumber");
+  Recordupdate(oldIVr,IVr,false); //otherwise officeal ser nr will not be in invoice
+
+  res = 0;
+LImportSHAndIV_OneFile:;
+  CloseFile;
+  ImportSHAndIV_OneFile = res;
+  return;
+end;
+
+updating
+procedure ImportSHAndIV_OneLocation(record LocationVc Locr, record InvBalXMLExpFolBlock EdiSetr,var integer errorcnt, var integer successcnt,string period_str)
+begin
+  record BLT_EDISetBlock BLT_EDISetr;
+  string 255 importpath,fn;
+  longint res;
+  integer filecnt,i;
+  boolean no_errors;
+
+  importpath = Locr.SHImpFolder;
+  if right(importpath,1) != "\\" and right(importpath,1) != "/" then begin
+    importpath = importpath & "\\";
+  end;
+
+  filecnt = CountFilesInDir(importpath);
+  for (i=filecnt-1;i>=0;i=i-1) begin
+     fn = GetFileNameInDir(importpath,i);
+     if right(fn,4) == ".xml" then begin
+       res = ImportSHAndIV_OneFile(importpath & fn, EdiSetr, period_str);
+       if res==0 then begin
+         Delete_File(importpath & fn);
+         successcnt = successcnt + 1;
+       end else begin
+         if res!=3 then begin
+           errorcnt = errorcnt + 1;
+         end;
+       end;
+     end;
+  end;
+
+  return;
+end;
+
+updating
+procedure ImportSHAndIV_OneComp(var integer errorcnt, var integer successcnt,string period_str)
+begin
+  record LocationVc Locr;
+  record InvBalXMLExpFolBlock EdiSetr;
+  boolean wloop,testf;
+
+  BlockLoad(EdiSetr);
+  if blank(EdiSetr.LogisticCustCode) then begin
+    LogText(0,"ImportSHAndIV_OneComp INFO :: No customer code for logistics company, skipping company");
+    GoTo LImportSHAndIV_OneComp;
+  end;
+
+  Locr.Code = "";
+  wloop = true;
+  While LoopMain(Locr,1,wloop) begin
+    testf = true;
+    if blank(Locr.SHImpFolder) then begin
+      testf = false;
+    end;
+    if testf then begin
+      ImportSHAndIV_OneLocation(Locr, EdiSetr,errorcnt,successcnt,period_str);
+    end;
+  end;
+LImportSHAndIV_OneComp:;
+  return;
+end;
+
+global updating
+procedure BLT_SHAndIVImportMn(Record RcVc RepSpec)
+Begin
+  integer oldcomp,i,rwcnt,errorcnt,successcnt;
+  record CompaniesBlock CBb;
+  row CompaniesBlock CBbrw;
+
+
+  if RepSpec.flags[0] == 1 then begin
+    // import for all companies
+    BlockLoad(CBb);
+    oldcomp = CurrentCompany;
+
+    rwcnt = MatRowCnt(CBb);
+    for (i=0;i<rwcnt;i=i+1) begin
+      MatRowGet(CBb,i,CBbrw);
+      if (SetCompanyCode(CBbrw.CompCode,false)) then begin
+        ImportSHAndIV_OneComp(errorcnt,successcnt,RepSpec.Stext);
+      end;
+    end;
+
+    ResetCompany(oldcomp);
+  end else begin
+    // import for this company only
+    ImportSHAndIV_OneComp(errorcnt,successcnt,RepSpec.Stext);
+  end;
+
+  MessageBox(0,"Import results successfully imported " & successcnt & " files and had " & errorcnt & " errors during import");
+
+return;
+end;

@@ -1,0 +1,144 @@
+external inner procedure ExportXmlNL(string);
+external inner procedure ExportXmlTagOpen(string);
+external inner procedure ExportXmlTagClose(string);
+external inner function string 255 ConvertXmlString(string,Boolean);
+external function Boolean BLT_CreateExpFile(string,string);
+
+updating
+procedure ExportOneSHVc(var record SHVc SHr)
+begin
+  record CUVc CUr;
+  record DelRouteVc DelRouter;
+  record SHVc oldSHr;
+  row SHVc SHrw;
+  integer i,rwc;
+
+  DelRouter.Code = SHr.Sorting;
+  ReadFirstMain(DelRouter,1,true);
+  CUr.Code = SHr.CustCode;
+  ReadFirstMain(CUr,1,true);
+
+  ExportXmlTagOpen("<delivery>");
+  ExportXmlNL("<id>" & SHr.SerNr & "</id>");
+  ExportXmlNL("<customer_id>" & SHr.CustCode & "</customer_id>");
+  ExportXmlNL("<customer_name>" & ConvertXmlString(SHr.Addr0,false) & "</customer_name>");
+  ExportXmlNL("<customer_code>" & ConvertXmlString(CUr.UserStr1,false) & "</customer_code>");
+  ExportXmlNL("<address>" & ConvertXmlString(SHr.Addr1,false) & "</address>");
+  ExportXmlNL("<route_id>" & ConvertXmlString(SHr.Sorting,false) & "</route_id>");
+  ExportXmlNL("<route_master>" & ConvertXmlString(DelRouter.Comment,false) & "</route_master>");
+  ExportXmlNL("<date>" & DateToString(SHr.ShipDate,"YYYY-MM-DD") & "</date>");
+  ExportXmlTagOpen("<product_list>");
+  rwc = MatRowCnt(SHr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SHr,i,SHrw);
+    if nonblank(SHrw.ArtCode) then begin
+      ExportXmlTagOpen("<product_listitem>");
+      ExportXmlNL("<product_id>" & SHrw.ArtCode & "</product_id>");
+      ExportXmlNL("<quantity>" & ValToString(SHrw.Ship,M45Val,"",".",0) & "</quantity>");
+      ExportXmlTagClose("</product_listitem>");
+    end;
+  end;
+
+  ExportXmlTagClose("</product_list>");
+  ExportXmlTagClose("</delivery>");
+
+  if SHr.BLT_Exportf==0 then begin
+    RecordCopy(oldSHr,SHr);
+    SHr.BLT_Exportf = 1;
+    if RecordUpdate(oldSHr,SHr,true)!=0 then begin
+      LogText(0,"ExprotOneSHVc ERROR :: Could not update SHVc record " & SHr.SerNr);
+    end;
+  end;
+
+  return;
+end;
+
+updating
+procedure ExportSHVc(record RcVc RepSpec)
+begin
+  record SHVc SHr;
+  boolean wloop,testf;
+
+  SetExportCodePage("UTF-8");
+  ExportXmlNL("<?xml version=\"1.0\"?>");
+  ExportXmlTagOpen("<root>");
+  ExportXmlTagOpen("<deliveries_list>");
+
+  wloop = true;
+  SHr.ShipDate = RepSpec.sStartDate;
+  While LoopKey("ShipDate",SHr,1,wloop) begin
+    if SHr.ShipDate > RepSpec.sEndDate then begin
+      wloop = false;
+    end else begin
+      testf = true;
+      if RepSpec.long1!=-1 and SHr.SerNr!=RepSpec.long1 then begin
+        testf = false;
+      end;
+      if SHr.BLT_Exportf==1 and RepSpec.flags[0]==0 then begin
+        testf = false;
+      end;
+      if SHr.BLT_Exportf==0 and RepSpec.flags[1]==0 then begin
+        testf = false;
+      end;
+      if testf then begin
+        if MatRowCnt(SHr)==0 then begin
+          testf = false;
+        end;
+      end;
+      if testf then begin
+        ExportOneSHVc(SHr);
+      end;
+    end;
+  end;
+
+  ExportXmlTagClose("</deliveries_list>");
+  ExportXmlTagClose("</root>");
+
+  return;
+end;
+
+global updating
+procedure BLT_SHToScannerMn(Record RcVc RepSpec)
+Begin
+  record BLT_ScannerSetBlock BLT_ScannerSetbl;
+  string 255 filename,tmpfile;
+
+  BlockLoad(BLT_ScannerSetbl);
+
+  if blank(BLT_ScannerSetbl.SHExpFolder) then begin
+    LogText(0,"BLT_SHToScannerMn ERROR :: Blank export folder, please check settings!");
+    GoTo LBLT_SHToScannerMn;
+  end;
+
+  if blank(BLT_ScannerSetbl.SHFileName) then begin
+    LogText(0,"BLT_SHToScannerMn ERROR :: Blank export file name, please check settings!");
+    GoTo LBLT_SHToScannerMn;
+  end;
+
+  SetFileOnServer(true); //thsi is needed for win server
+  filename = BLT_ScannerSetbl.SHFileName;
+  tmpfile = "tmp/" & filename;
+
+  if FileExists(tmpfile) then begin
+    Delete_File(tmpfile);
+  end;
+
+  //Create export file
+  BLT_CreateExpFile(filename,"tmp");
+
+  //Open export file
+  OpenExportFile(tmpfile, true);
+
+  //Export SHVc records
+  ExportSHVc(RepSpec);
+
+  //Close file
+  CloseFile;
+
+  //Move file
+  MoveFile(filename,"tmp",BLT_ScannerSetbl.SHExpFolder);
+  SetFileOnServer(false);
+
+LBLT_SHToScannerMn:;
+return;
+end;

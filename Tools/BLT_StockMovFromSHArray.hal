@@ -1,0 +1,138 @@
+external inner function Boolean ReadFirstItem(string,var record INVc,Boolean,Boolean);
+
+global
+function string 20 GetPalletItemCode(string loc)
+begin
+  record LocationVc Locationr;
+  string 20 res;
+
+  res = "";
+  Locationr.Code = loc;
+  if ReadFirstMain(Locationr,1,true) then begin
+    res = Locationr.DefaultPalItem;
+  end;
+
+  GetPalletItemCode = res;
+  return;
+end;
+
+global
+function val GetItemVolume(string itemcode)
+begin
+  val res;
+  record INVc INr;
+
+  if ReadFirstItem(itemcode,INr,true,true) then begin
+    res = INr.Volume;
+  end;
+
+  GetItemVolume = res;
+  return;
+end;
+
+global
+function val GetOneStockMovVolume(record StockMovVc StockMovr)
+begin
+  integer i,rwc;
+  row StockMovVc StockMovrw;
+  val res;
+
+  res = 0;
+  rwc = MatRowCnt(StockMovr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(StockMovr,i,StockMovrw);
+    if nonblank(StockMovrw.ArtCode) then begin
+      res = res + StockMovrw.Quant * GetItemVolume(StockMovrw.ArtCode);
+    end;
+  end;
+
+  GetOneStockMovVolume = res;
+  return;
+end;
+
+global
+function val GetOneORVolume(record ORVc ORr)
+begin
+  integer i,rwc;
+  row ORVc ORrw;
+  val res;
+
+  res = 0;
+  rwc = MatRowCnt(ORr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(ORr,i,ORrw);
+    if nonblank(ORrw.ArtCode) then begin
+      res = res + (ORrw.Quant - ORrw.Shipd1) * GetItemVolume(ORrw.ArtCode);
+    end;
+  end;
+
+  GetOneORVolume = res;
+  return;
+end;
+
+function val GetOneSHVolume(record SHVc SHr)
+begin
+  integer i,rwc;
+  row SHVc SHrw;
+  val res;
+
+  res = 0;
+  rwc = MatRowCnt(SHr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SHr,i,SHrw);
+    if nonblank(SHrw.ArtCode) and SHrw.stp==1 then begin
+      res = res + SHrw.Ship * GetItemVolume(SHrw.ArtCode);
+    end;
+  end;
+
+  GetOneSHVolume = res;
+  return;
+end;
+
+function val GetCustTotalVolume(array record SHVc aSHr,string CustCode)
+begin
+  val res;
+  record SHVc SHr;
+  integer i;
+
+  res = 0;
+  for (i=0;i<aSHr.length;i=i+1)begin
+    SHr = aSHr[i];
+    if SHr.CustCode==CustCode then begin
+      res = res + GetOneSHVolume(SHr);
+    end;
+  end;
+
+  GetCustTotalVolume = res;
+  return;
+end;
+
+// global updating
+// procedure BLT_StockMovFromSHArray(array Record SHVc aSHr,string route,val totPalletVolume)
+// begin
+//   integer i,a,rwc;
+//   record SHVc SHr;
+//   row SHVc SHrw;
+//
+//   for (a=0;a<aSHr.length;a=a+1)begin
+//     SHr = aSHr[a];
+//     rwc = MatRowCnt(SHr);
+//     for(i=0;i<rwc;i=i+1)begin
+//       MatRowGet(SHr,i,SHrw);
+//       if nonblank(SHrw.ArtCode) then begin
+//         procedure BLT_SHMakeStockMovements(var Array record StockMovVc aStockMovr,var Integer acnt,record SHVc SHp,row SHVc SHrw,record INVc INp,string MainStock,string DeliveryPosCode,string DeliveryArea,string warehouse,Integer shrow);
+//       end;
+//     end;
+//
+//   end;
+//
+//   return;
+// end;
+
+
+//remove all pallets from stock mov record
+//check if current stock mov has more space
+//if not add pallet and start new stock mov
+//if yes check if next cust can be fully added
+//if yes add to stock mov and check space again
+//if no add pallet and start new stock mov

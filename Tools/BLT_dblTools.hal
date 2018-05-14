@@ -1,0 +1,43 @@
+
+global updating
+procedure dblFinishSMAndReRun(string dblstr,string l,Integer currepwn)
+begin
+  record StockMovVc StockMovr,oldStockMovr;
+  record RcVc RepSpec;
+
+  StockMovr.SerNr = StringToLongInt(l);
+  if !ReadFirstMain(StockMovr,1,true) then begin
+    GoTo LdblFinishSMAndReRun;
+  end;
+
+  if StockMovr.OKFlag!=1 then begin
+    RecordCopy(oldStockMovr,StockMovr);
+    StockMovr.OKFlag = 1;
+    if RecordUpdate(oldStockMovr,StockMovr,true)==0 then begin
+      //Re run ReportDefaults
+      GetWindowRecord(currepwn,RepSpec);
+      CloseWindow(currepwn);
+      RepSpec.Media = mtScreen;
+      RunReport(RepSpec,0);
+    end;
+  end;
+
+LdblFinishSMAndReRun:;
+  return;
+end;
+
+global
+procedure dblDelAddrVc(string dblstr, string l, integer currepwn)
+begin
+  record DelAddrVc DelAddrr;
+  integer wn;
+
+  DelAddrr.CustCode = LastInRange(l,20);
+  DelAddrr.DelCode = FirstInRange(l,20);
+
+  if Readfirstmain(DelAddrr,2,true) then begin
+    wn = OpenWindow("DelAddrDClass",1,0,"","",DelAddrr);
+  end;
+
+  return;
+end;

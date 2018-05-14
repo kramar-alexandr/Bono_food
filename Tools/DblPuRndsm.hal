@@ -1,0 +1,25 @@
+remote procedure DblPuRndsmfunctionRemote(record RcVc,var array record POQTVc,var array record StockMovVc,var integer,var integer);
+
+global
+procedure DblPuRndsm(string dblstr,string l,Integer currepwn)
+begin
+	record RcVc RepSpec;
+	integer pcnt,scnt;
+	array record POQTVc POQTrArr;
+	array record StockMovVc SMrArr;
+  record POQTVc POQTr;
+  record StockMovVc SMr;
+  integer i,rwcnt,wn;
+	
+  GetWindowRecord(currepwn,RepSpec);
+  DblPuRndsmfunctionRemote(RepSpec,POQTrArr,SMrArr,pcnt,scnt);
+  for (i=1;i<=pcnt;i=i+1) begin
+  	POQTr = POQTrArr[i];
+  	wn = OpenWindow("POQTDClass",1,0,"","",POQTr);
+  end;
+  for (i=1;i<=scnt;i=i+1) begin
+  	SMr = SMrArr[i];
+  	wn = OpenWindow("StockMovDClass",1,0,"","",SMr);
+  end;  
+  return;
+end;

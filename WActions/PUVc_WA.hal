@@ -1,0 +1,112 @@
+remote inner function Integer PUVc_PasteQuant(var record PUVc,Integer);
+remote function Integer PUVc_PasteQuant2(var record PUVc,Integer);
+
+procedure TransferImpQuantPU(var record PUVc PUr)
+begin
+  row PUVc PUrw;
+  integer i,rwc;
+
+  rwc = MatRowCnt(PUr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(PUr,i,PUrw);
+    if PUrw.stp==1 then begin
+      PUrw.Quant = PUrw.ImportQuant;
+      MatRowPut(PUr,i,PUrw);
+      PUVc_PasteQuant(PUr,i);
+    end;
+  end;
+
+  return;
+end;
+
+global
+procedure BLT_TransImpQuantPUDsm()
+begin
+  record PUVc PUr;
+  integer wn;
+
+  wn = CurWindow;
+  GetWindowRecord(wn,PUr);
+
+  if PUr.OKFlag==1 then begin
+    Beep;
+    GoTo LBLT_TransImpQuantPUDsm;
+  end;
+
+  if PUr.BLT_Importf==0 then begin
+    Beep;
+    GoTo LBLT_TransImpQuantPUDsm;
+  end;
+
+  TransferImpQuantPU(PUr);
+  PutWindowRecord(wn,PUr);
+
+LBLT_TransImpQuantPUDsm:;
+  return;
+end;
+
+global
+procedure BLT_PrintPUPalletLabPUDsm()
+BEGIN
+  record RcVc RepSpec;
+  record PUVc PUr;
+  Integer wn;
+
+  wn = CurWindow;
+  GetWindowRecord(wn,PUr);
+  ReportDefaults(RepSpec,"BLT_PUPalletLabRClass");
+  RepSpec.f1 = PUr.SerNr;
+  RepSpec.Media = mtPrinter;
+  // RepSpec.Media = mtScreen;
+  RepSpec.repname = "BLT_PUPalletLabForm";
+  if (PrintDocument(RepSpec,"BLT_PUPalletLabForm",false)) then begin end;
+  RETURN;
+END;
+
+global
+function Boolean PUDClassActiveEditField(Integer wn,string fieldname,Integer fn,Integer wnst,Integer rownr,Integer changed)
+BEGIN
+  Boolean res;
+
+  res = inner.PUDClassActiveEditField(wn,fieldname,fn,wnst,rownr,changed);
+  if fieldname=="ForkliftUser" then begin
+    res = true;
+  end;
+
+  PUDClassActiveEditField = res;
+  return;
+end;
+
+function Boolean PUDClassQuant2EFAfter(Integer wn,Integer rownr,boolean changedf)
+begin
+  record PUVc PUr;
+  Integer res;
+
+  if (changedf) then begin
+    GetWindowRecord(wn,PUr);
+    res = PUVc_PasteQuant2(PUr,rownr);
+    if (res==0) then begin
+      PutWindowRecord(wn,PUr);
+    end else begin
+      MessageBox(res,"");
+    end;
+  end;
+  PUDClassQuant2EFAfter = true;
+  return;
+end;
+
+
+global
+updating function Boolean PUDClassAfterEditField(Integer wn,string fieldname,Integer fn, Integer rownr,Integer changed)
+BEGIN
+  Boolean res;
+
+  res = inner.PUDClassAfterEditField(wn,fieldname,fn,rownr,changed);
+
+  switch (fieldname) begin
+    case "Quant2": res = PUDClassQuant2EFAfter(wn,rownr,changed!=0);
+  end;
+
+  PUDClassAfterEditField = res;
+  return;
+end;

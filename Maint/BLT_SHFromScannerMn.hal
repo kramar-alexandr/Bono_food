@@ -1,0 +1,178 @@
+external inner function date XmlGetDate(var xml,string,string);
+external inner updating function LongInt RecordAction_raPasteOrdInShip2(var record SHVc,LongInt,var string);
+external inner function val GetStockQty2(string,string,Date,Boolean,Integer);
+external inner procedure SHVc_PasteShip(var record SHVc,var Integer);
+external inner procedure SHSumUp(var record SHVc);
+
+global
+function boolean BLT_SHFromScannerVClassOnOKWindow(integer wn)
+begin
+  record RcVc RepSpec;
+  boolean res;
+
+  res = true;
+  GetWindowRecord(wn,RepSpec);
+  if blank(RepSpec.f1) then begin
+    MessageBox(1058,"");
+    WindowFieldGoto(wn,RepSpec,-1,"f1",true);
+    res = false;
+    GoTo LBLT_SHFromScannerVClassOnOKWindow;
+  end;
+
+LBLT_SHFromScannerVClassOnOKWindow:;
+  BLT_SHFromScannerVClassOnOKWindow = res;
+  return;
+end;
+
+procedure UpdateSH(var record SHVc SHr,string item,val quant,date bestbef)
+begin
+  row SHVc SHrw;
+  integer i,rwc;
+  boolean testf,foundf;
+  string 255 tstr;
+  val t;
+
+  rwc = MatRowCnt(SHr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SHr,i,SHrw);
+    testf = true;
+    if item!=SHrw.ArtCode then begin
+      testf = false;
+    end;
+    if SHrw.stp!=1 then begin
+      testf = false;
+    end;
+    if testf then begin
+      foundf = true;
+      SHrw.ImportQuant = quant;
+      // if blankdate(SHrw.BestBefore) then begin
+      //   SHrw.BestBefore = bestbef;
+      // end;
+      t = GetStockQty2(SHrw.ArtCode,SHr.Location,SHr.ShipDate,false,0);
+      if t > quant then begin
+        t = quant;
+      end;
+      SHrw.Ship = t;
+      MatRowPut(SHr,i,SHrw);
+      SHVc_PasteShip(SHr,i);
+      SHSumUp(SHr);
+      i = rwc;
+    end;
+  end;
+
+  if !foundf then begin
+    // ClearRow(SHr,SHrw,1);
+    // SHrw.ArtCode = item;
+    // MatRowPut(SHr,rwc,SHrw);
+    // SHVc_PasteArtCode(SHr,rwc,tstr,tstr);
+    // MatRowGet(SHr,rwc,SHrw);
+    // SHrw.ImportQuant = quant;
+    // SHrw.BestBefore = bestbef;
+    // MatRowPut(SHr,rwc,SHrw);
+  end;
+
+  return;
+end;
+
+global updating
+procedure BLT_SHFromScannerOneFile(string filename)
+begin
+  record BLT_ScannerSetBlock BLT_ScannerSetr;
+  record ORVc ORr,oldORr;
+  record SHVc SHr,oldSHr;
+  string 255 tstr,rootnode,item;
+  longint r;
+  integer i,a;
+  val quant;
+  date bestbef;
+  boolean error_flag;
+  xml xData;
+
+  xData = Parsexmlfile(filename);
+  rootnode = "order_processing_result_list/order_processing_result_listitem";
+  while (XmlNodeExists(xdata,rootnode & "[" & i & "]")) begin
+    ORr.SerNr = StringToLongInt(XmlGet(xData,rootnode & "[" & i & "]" & "/order_id"));
+    if !ReadFirstMain(ORr,1,true) then begin
+      error_flag = true;
+      LogText(0,"BLT_SHFromScannerMn ERROR :: Could not find ORVc record " & ORr.SerNr);
+      GoTo LNextSH;
+    end;
+
+    if ORr.ShipMark==1 then begin
+      error_flag = true;
+      LogText(0,"BLT_SHFromScannerMn ERROR :: ORVc record is already fully shipped " & ORr.SerNr);
+      GoTo LNextSH;
+    end;
+
+    if ORr.BLT_Importf==1 then begin
+      error_flag = true;
+      LogText(0,"BLT_SHFromScannerMn ERROR :: ORVc record is already imported " & ORr.SerNr);
+      GoTo LNextSH;
+    end;
+
+    // genereate shvc from orvc
+    r = RecordAction_raPasteOrdInShip2(SHr,ORr.SerNr,tstr);
+    if r!=0 then begin
+      error_flag = true;
+      LogText(0,"BLT_SHFromScannerMn ERROR :: Could not create SHVc from ORVc record, error " & r);
+      GoTo LNextSH;
+    end;
+
+    RecordCopy(oldSHr,SHr);
+    RecordCopy(oldORr,ORr);
+    a = 0;
+    While (XmlNodeExists(xData,rootnode & "[" & i & "]" & "/product_list/product_listitem" & "[" & a & "]")) begin
+      item = XmlGet(xData,rootnode & "[" & i & "]/product_list/product_listitem[" & a & "]/product_id");
+      quant = StringToVal(XmlGet(xData,rootnode & "[" & i & "]/product_list/product_listitem[" & a & "]/quantity"),M4UVal);
+      // bestbef = XmlGetDate(xData,rootnode & "[" & i & "]/product_list/product_listitem[" & a & "]/expiry_date","YYYY-MM-DD");
+      UpdateSH(SHr,item,quant,bestbef);
+      a = a + 1;
+    end;
+
+    SHr.BLT_Importf = 1;
+    if RecordUpdate(oldSHr,SHr,true)!=0 then begin
+      error_flag = true;
+      LogText(0,"BLT_SHFromScannerMn ERROR :: Cannot update SHVc record " & SHr.SerNr);
+      GoTo LNextSH;
+    end;
+
+    ORr.BLT_Importf = 1;
+    if RecordUpdate(oldORr,ORr,true)!=0 then begin
+      error_flag = true;
+      LogText(0,"BLT_SHFromScannerMn ERROR :: Cannot update ORVc record " & ORr.SerNr);
+      GoTo LNextSH;
+    end;
+
+LNextSH:;
+    i = i + 1;
+  end;
+
+  if FileExists(filename) and error_flag==false then begin
+    Delete_File(filename);
+  end;
+
+  return;
+end;
+
+global updating
+procedure BLT_SHFromScannerMn(Record RcVc RepSpec)
+Begin
+  record BLT_ScannerSetBlock BLT_ScannerSetr;
+  string 255 tstr,rootnode,item;
+
+  SetFileOnServer(true);
+
+  BlockLoad(BLT_ScannerSetr);
+
+  tstr = BLT_ScannerSetr.SHImpFolder & "\\" & RepSpec.f1;
+  if !FileExists(tstr) then begin
+    GoTo LBLT_SHFromScannerMn;
+  end;
+
+  BLT_SHFromScannerOneFile(tstr);
+
+LBLT_SHFromScannerMn:;
+  SetFileOnServer(false);
+
+return;
+end;

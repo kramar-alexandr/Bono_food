@@ -1,0 +1,70 @@
+external inner function Boolean ReadFirstItem(string,var record INVc,Boolean,Boolean);
+
+global
+updating function LongInt ProdVcRecordCheck(var record ProdVc Prodp,record ProdVc Prod2p,LongInt stat,LongInt check)
+begin
+  LongInt res;
+  boolean testf;
+  row ProdVc Prodrw;
+  record INVc INr;
+  integer i,rwc;
+
+  //ProdVc is closed and only language is changed, then no checks are needed
+  if (stat==Rs_update) then begin
+    if (Prodp.PRStatusFlag>2) then begin
+      if Prodp.PRStatusFlag==Prod2p.PRStatusFlag and Prodp.LangCode!=Prod2p.LangCode then begin
+        res = 0;
+        GoTo LProdVcRecordCheck;
+      end;
+    end;
+  end;
+
+  testf = true;
+  if (Prodp.PRStatusFlag==0) then begin
+    if (stat==Rs_update) then begin
+      if (Prod2p.PRStatusFlag!=0) then begin testf = false; end;
+    end;
+  end;
+  if (Prodp.PRStatusFlag==2) then begin
+    if (stat==Rs_update) then begin
+      if (Prod2p.PRStatusFlag>2) then begin testf = false; end;
+    end;
+  end;
+
+  if Prodp.PRStatusFlag!=3 then begin
+    testf = false;
+  end;
+  if testf then begin
+    if (stat==Rs_update) and Prodp.PRStatusFlag==3 then begin
+      testf = false;
+    end;
+  end;
+
+  if testf then begin
+    if Prodp.QtyInBox < 0 then begin
+      RecordCheckError(20265," 0",-1,"QtyInBox");
+      res = -1;
+      goto LProdVcRecordCheck;
+    end;
+
+    rwc = MatRowCnt(Prodp);
+    for(i=0;i<rwc;i=i+1)begin
+      MatRowGet(Prodp,i,Prodrw);
+      if nonblank(Prodrw.Item) and Prodrw.OutQty>0 then begin
+        if ReadFirstItem(Prodrw.Item,INr,true,true) then begin
+          if INr.EBS_ReqBestBefore==1 and INr.SerNrf==2 and blankdate(Prodrw.BestBefore) then begin
+            RecordCheckError(1058,"",i,"BestBefore");
+            res = -1;
+            goto LProdVcRecordCheck;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  res = inner.ProdVcRecordCheck(Prodp,Prod2p,stat,check);
+
+LProdVcRecordCheck:;
+  ProdVcRecordCheck = res;
+  return;
+end;

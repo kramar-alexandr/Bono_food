@@ -1,0 +1,153 @@
+external inner function date XmlGetDate(var xml,string,string);
+external inner function Boolean PUVc_PasteArtCode(var record PUVc,Integer,var string,var string);
+
+global
+function boolean BLT_PUFromScannerVClassOnOKWindow(integer wn)
+begin
+  record RcVc RepSpec;
+  boolean res;
+
+  res = true;
+  GetWindowRecord(wn,RepSpec);
+  if blank(RepSpec.f1) then begin
+    MessageBox(1058,"");
+    WindowFieldGoto(wn,RepSpec,-1,"f1",true);
+    res = false;
+    GoTo LBLT_PUFromScannerVClassOnOKWindow;
+  end;
+
+LBLT_PUFromScannerVClassOnOKWindow:;
+  BLT_PUFromScannerVClassOnOKWindow = res;
+  return;
+end;
+
+procedure UpdatePU(var record PUVc PUr,string item,val quant,date bestbef)
+begin
+  row PUVc PUrw;
+  integer i,rwc;
+  boolean testf,foundf;
+  string 255 tstr;
+
+  rwc = MatRowCnt(PUr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(PUr,i,PUrw);
+    testf = true;
+    if item!=PUrw.ArtCode then begin
+      testf = false;
+    end;
+    if PUrw.stp!=1 then begin
+      testf = false;
+    end;
+    if testf then begin
+      foundf = true;
+      PUrw.ImportQuant = quant;
+      // if blankdate(PUrw.BestBefore) then begin
+      //   PUrw.BestBefore = bestbef;
+      // end;
+      MatRowPut(PUr,i,PUrw);
+      i = rwc;
+    end;
+  end;
+
+  if !foundf then begin
+    ClearRow(PUr,PUrw,1);
+    PUrw.ArtCode = item;
+    MatRowPut(PUr,rwc,PUrw);
+    PUVc_PasteArtCode(PUr,rwc,tstr,tstr);
+    MatRowGet(PUr,rwc,PUrw);
+    PUrw.ImportQuant = quant;
+    // PUrw.BestBefore = bestbef;
+    MatRowPut(PUr,rwc,PUrw);
+  end;
+
+  return;
+end;
+
+global updating
+procedure BLT_PUFromScannerOneFile(string filename)
+begin
+  record PUVc PUr,oldPUr;
+  string 255 tstr,rootnode,item;
+  integer i,a;
+  val quant;
+  date bestbef;
+  xml xData;
+  boolean error_flag;
+
+  error_flag = false;
+  xData = Parsexmlfile(filename);
+  rootnode = "delivery_processing_result_list/delivery_processing_result_listitem";
+  while (XmlNodeExists(xdata,rootnode & "[" & i & "]")) begin
+    PUr.SerNr = StringToLongInt(XmlGet(xData,rootnode & "[" & i & "]" & "/delivery_id"));
+    if !ReadFirstMain(PUr,1,true) then begin
+      error_flag = true;
+      LogText(0,"BLT_PUFromScannerMn ERROR :: Could not find PUVc record " & PUr.SerNr);
+      GoTo LNextPU;
+    end;
+
+    if PUr.OKFlag==1 then begin
+      error_flag = true;
+      LogText(0,"BLT_PUFromScannerMn ERROR :: PUVc record is already oked " & PUr.SerNr);
+      GoTo LNextPU;
+    end;
+
+    if PUr.BLT_Importf==1 then begin
+      error_flag = true;
+      LogText(0,"BLT_PUFromScannerMn ERROR :: PUVc record is already imported " & PUr.SerNr);
+      GoTo LNextPU;
+    end;
+
+    RecordCopy(oldPUr,PUr);
+    a = 0;
+    While (XmlNodeExists(xData,rootnode & "[" & i & "]" & "/product_list/product_listitem" & "[" & a & "]")) begin
+      item = XmlGet(xData,rootnode & "[" & i & "]/product_list/product_listitem[" & a & "]/product_id");
+      quant = StringToVal(XmlGet(xData,rootnode & "[" & i & "]/product_list/product_listitem[" & a & "]/quantity"),M4UVal);
+      // bestbef = XmlGetDate(xData,rootnode & "[" & i & "]/product_list/product_listitem[" & a & "]/expiry_date","YYYY-MM-DD");
+      UpdatePU(PUr,item,quant,bestbef);
+      a = a + 1;
+    end;
+
+    PUr.BLT_Importf = 1;
+    if RecordUpdate(oldPUr,PUr,true)!=0 then begin
+      error_flag = true;
+      LogText(0,"BLT_PUFromScannerMn ERROR :: Cannot update PUVc record " & PUr.SerNr);
+      GoTo LNextPU;
+    end;
+LNextPU:;
+    i = i + 1;
+  end;
+
+  if FileExists(filename) and error_flag==false then begin
+    Delete_File(filename);
+  end;
+
+  return;
+end;
+
+global updating
+procedure BLT_PUFromScannerMn(Record RcVc RepSpec)
+Begin
+  record BLT_ScannerSetBlock BLT_ScannerSetr;
+  record PUVc PUr,oldPUr;
+  string 255 tstr,rootnode,item;
+  integer i,a;
+  val quant;
+  date bestbef;
+  xml xData;
+
+  SetFileOnServer(true);
+
+  BlockLoad(BLT_ScannerSetr);
+
+  tstr = BLT_ScannerSetr.PUImpFolder & "\\" & RepSpec.f1;
+  if !FileExists(tstr) then begin
+    GoTo LBLT_PUFromScannerMn;
+  end;
+
+  BLT_PUFromScannerOneFile(tstr);
+
+LBLT_PUFromScannerMn:;
+  SetFileOnServer(false);
+
+return;
+end;

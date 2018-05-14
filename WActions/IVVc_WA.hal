@@ -1,0 +1,23 @@
+external inner function Boolean ReadFirstItem(string,var record INVc,Boolean,Boolean);
+
+global
+function string 255 IVLClassCalcBruttoWeight(record IVVc IVr)
+begin
+  record INVc INr;
+  row IVVc IVrw;
+  integer i,rwc;
+  val res;
+
+  rwc = MatRowCnt(IVr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(IVr,i,IVrw);
+    if IVrw.Quant != 0 then begin
+      if (ReadFirstItem(IVrw.ArtCode,INr,true,true)) then begin
+        res = res + INr.Weight * IVrw.Quant;
+      end;
+    end;
+  end;
+
+  IVLClassCalcBruttoWeight = res;
+  return;
+end;

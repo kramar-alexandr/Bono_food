@@ -1,0 +1,85 @@
+external updating procedure BLT_INToScannerMn(record RcVc);
+external updating procedure BLT_SHToScannerMn(Record RcVc);
+external updating procedure BLT_PUToScannerMn(Record RcVc);
+external updating procedure BLT_ORToScannerMn(Record RcVc);
+external updating procedure BLT_SHFromScannerOneFile(string);
+external updating procedure BLT_PUFromScannerOneFile(string);
+
+global
+procedure BLT_SyncAllScannerVClassReportDefaults(Integer wn)
+begin
+  record RcVc RepSpec;
+
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,RepSpec);
+  ReportDefaults(RepSpec,"BLT_SyncAllScannerVClass");
+  RepSpec.flags[1] = 1;
+  RepSpec.flags[3] = 0;
+  RepSpec.flags[4] = 1;
+  RepSpec.flags[5] = 1;
+  RepSpec.flags[6] = 1;
+  RepSpec.flags[7] = 1;
+  PutWindowRecord(wn, RepSpec);
+
+return;
+end;
+
+global updating
+procedure BLT_SyncAllScannerMn(Record RcVc RepSpec)
+Begin
+  record BLT_ScannerSetBlock BLT_ScannerSetr;
+  integer c,i;
+  string 255 fn;
+
+  RepSpec.long1 = -1;
+
+  // export items
+  if RepSpec.flags[2] == 1 then begin
+    BLT_INToScannerMn(RepSpec);
+  end;
+
+  // export shvc
+  if RepSpec.flags[3] == 1 then begin
+    BLT_SHToScannerMn(RepSpec);
+  end;
+
+  // export puvc
+  if RepSpec.flags[4] == 1 then begin
+    BLT_PUToScannerMn(RepSpec);
+  end;
+
+  // export orvc
+  if RepSpec.flags[7] == 1 then begin
+    BLT_ORToScannerMn(RepSpec);
+  end;
+
+  // import shvc
+  if RepSpec.flags[5] == 1 then begin
+    BlockLoad(BLT_ScannerSetr);
+    if nonblank(BLT_ScannerSetr.SHImpFolder) then begin
+      c = CountFilesInDir(BLT_ScannerSetr.SHImpFolder);
+      for (i=c-1;i>=0;i=i-1) begin
+        fn = GetFileNameInDir(BLT_ScannerSetr.SHImpFolder,i);
+        if right(fn,4)==".xml" then begin
+          BLT_SHFromScannerOneFile(BLT_ScannerSetr.SHImpFolder & "\\" & fn);
+        end;
+      end;
+    end;
+  end;
+
+  // import puvc
+  if RepSpec.flags[6] == 1 then begin
+    BlockLoad(BLT_ScannerSetr);
+    if nonblank(BLT_ScannerSetr.PUImpFolder) then begin
+      c = CountFilesInDir(BLT_ScannerSetr.PUImpFolder);
+      for (i=c-1;i>=0;i=i-1) begin
+        fn = GetFileNameInDir(BLT_ScannerSetr.PUImpFolder,i);
+        if right(fn,4)==".xml" then begin
+          BLT_PUFromScannerOneFile(BLT_ScannerSetr.PUImpFolder & "\\" & fn);
+        end;
+      end;
+    end;
+  end;
+
+return;
+end;

@@ -1,0 +1,1598 @@
+external inner function string 255 GetCustomerPriceList(string);
+external inner function Boolean ReadFirstItem(string,var record INVc,Boolean,Boolean);
+external inner function Integer PUVc_PasteQuant(var record PUVc,Integer);
+external inner procedure POVc_PasteQuant(var record POVc,Integer);
+external inner function LongInt GetCurUserLastNr(string);
+external inner updating procedure AssignStockResFromPO(record POVc);
+external inner function Boolean GetFirstItem(var string,var record INVc);
+external inner function val ItemInStock(var record INVc,string);
+external inner procedure FindBatchBestBeforeDate(string,string,var Date);
+external inner procedure M4PadString(string,Integer,string,Boolean,var string);
+external updating function Integer EBS_PastePOInPU(record POVc,record PUVc,Integer,array string,array val,array string,array date,array integer);
+external updating function boolean EDI_ImportOneFile(string);
+external function Boolean Prod_PasteBatchSerItems2(var string,var Date,var Integer,var val,var record ProdVc,var longint);
+
+global
+function date BLT_GetBestBeforeSerBal(string artcode,string serialnr,string location)
+begin
+  record SerBalVc SerBalr;
+  date res;
+
+  SerBalr.Item = ArtCode;
+  SerBalr.Serial = SerialNr;
+  SerBalr.Location = location;
+  if ReadFirstKey("ItemSerial",SerBalr,3,true) then begin
+    res = SerBalr.NewBestBefore;
+  end;
+
+  BLT_GetBestBeforeSerBal = res;
+  return;
+end;
+
+global
+function date BLT_GetBestBeforeDate(string SerialNr,string ArtCode,longint OrderNr)
+begin
+  date res;
+  record SHVc SHr;
+  row SHVc SHrw;
+  integer i,rwc;
+  boolean wloop;
+
+  if OrderNr==-1 then begin
+    GoTo LBLT_GetBestBeforeDate;
+  end;
+  if blank(SerialNr) then begin
+    GoTo LBLT_GetBestBeforeDate;
+  end;
+  if blank(ArtCode) then begin
+    GoTo LBLT_GetBestBeforeDate;
+  end;
+
+  SHr.OrderNr = OrderNr;
+  wloop = true;
+  While LoopKey("OrderKey",SHr,1,wloop) begin
+    if SHr.OrderNr!=OrderNr then begin
+      wloop = false;
+    end else begin
+      rwc = MatRowCnt(SHr);
+      for (i=0;i<rwc;i=i+1)begin
+        MatRowGet(SHr,i,SHrw);
+        if SHrw.ArtCode==ArtCode and SHrw.SerialNr==SerialNr and nonblankdate(SHrw.BestBefore) then begin
+          res = SHrw.BestBefore;
+          GoTo LBLT_GetBestBeforeDate;
+        end;
+      end;
+    end;
+  end;
+
+LBLT_GetBestBeforeDate:;
+  BLT_GetBestBeforeDate = res;
+  return;
+end;
+
+global
+function integer EBS_GetRowNumber(longint r)
+begin
+  integer rownr;
+
+  if r>=31000 and r<31500 then begin
+    rownr = r - 31000;
+  end;
+  if r>=31500 and r<32000 then begin
+    rownr = r - 31500;
+  end;
+
+  EBS_GetRowNumber = rownr;
+  return;
+end;
+
+function val CalculateQty(val qty,val coefficient)
+begin
+  record MainStockBlock MSb;
+  val res;
+
+  BlockLoad(MSb);
+  if (coefficient==0) then begin
+    res = qty;
+  end else begin
+    switch (MSb.UnitConvCalc) begin //reverse, cuz this is from 2 > 1
+      case 0: res = qty/coefficient;
+      case 1: res = qty*coefficient;
+    end;
+  end;
+  CalculateQty = res;
+  RETURN;
+END;
+
+
+global
+function Integer PUVc_PasteQuant2(var record PUVc PUr,Integer rownr)
+begin
+  integer res;
+  record INVc INr;
+  row PUVc PUrw;
+  val t;
+
+  MatRowGet(PUr,rownr,PUrw);
+  if (ReadFirstItem(PUrw.ArtCode,INr,true,true)) then begin
+    t = CalculateQty(PUrw.Quant2,INr.UnitCoefficient); //EBS
+    If PUrw.Quant!=t then begin
+      PUrw.Quant = t;
+      MatRowPut(PUr,rownr,PUrw);
+      res = PUVc_PasteQuant(PUr,rownr);
+    end;
+  end;
+
+  PUVc_PasteQuant2 = res;
+  return;
+end;
+
+global
+procedure POVc_PasteQuant2(var record POVc POr,Integer rownr) begin
+  record INVc INr;
+  row POVc POrw;
+  val t;
+
+  MatRowGet(POr,rownr,POrw);
+  if (ReadFirstItem(POrw.ArtCode,INr,true,true)) then begin
+    t = CalculateQty(POrw.Quant2,INr.UnitCoefficient);
+    If POrw.Quant!=t then begin
+      POrw.Quant = t;
+      MatRowPut(POr,rownr,POrw);
+      POVc_PasteQuant(POr,rownr);
+    end;
+  end;
+
+  return;
+end;
+
+function Date BLT_GetNextDelDate(record DelRouteVc DelRouter)
+begin
+  Date res,td;
+  Boolean contf,testf;
+
+  res = "";
+  td = AddDay(CurrentDate,1);
+  if (DelRouter.MonFlag!=0 or DelRouter.TueFlag!=0 or DelRouter.WedFlag!=0 or DelRouter.ThuFlag!=0 or DelRouter.FriFlag!=0 and DelRouter.SatFlag!=0 or DelRouter.SunFlag!=0) then begin
+    // td = res;
+    contf = true;
+    while (contf) begin
+      testf = false;
+      if (DelRouter.MonFlag!=0) then begin
+        if (GetDateId(td)==1) then begin testf = true; end;
+      end;
+      if (DelRouter.TueFlag!=0) then begin
+        if (GetDateId(td)==2) then begin testf = true; end;
+      end;
+      if (DelRouter.WedFlag!=0) then begin
+        if (GetDateId(td)==3) then begin testf = true; end;
+      end;
+      if (DelRouter.ThuFlag!=0) then begin
+        if (GetDateId(td)==4) then begin testf = true; end;
+      end;
+      if (DelRouter.FriFlag!=0) then begin
+        if (GetDateId(td)==5) then begin testf = true; end;
+      end;
+      if (DelRouter.SatFlag!=0) then begin
+        if (GetDateId(td)==6) then begin testf = true; end;
+      end;
+      if (DelRouter.SunFlag!=0) then begin
+        if (GetDateId(td)==7) then begin testf = true; end;
+      end;
+      if (testf) then begin
+        contf = false;
+        res = td;
+      end;
+      if (contf) then begin
+        td = AddDay(td,1);
+      end;
+    end;
+  end;
+
+  BLT_GetNextDelDate = res;
+  return;
+end;
+
+global
+procedure ORVc_PasteSorting(var record ORVc ORr)
+begin
+  record DelRouteVc DelRouter;
+
+  if blank(ORr.Sorting) then begin
+    GoTo LORVc_PasteSorting;
+  end;
+
+  DelRouter.Code = ORr.Sorting;
+  if !ReadFirstMain(DelRouter,1,true) then begin
+    GoTo LORVc_PasteSorting;
+  end;
+
+  ORr.PlanShip = BLT_GetNextDelDate(DelRouter);
+  ORr.PlanShipDate = StringToDate(ORr.PlanShip);
+
+LORVc_PasteSorting:;
+  return;
+end;
+
+
+function Date BLT_GetPlanDelDate(record PIVc PIr, date fromdate, boolean prevoisDatef)
+begin
+  Date res,td;
+  Boolean contf,testf;
+
+  res = "";
+  if prevoisDatef then begin
+    td = AddDay(fromdate,-PIr.PlannedDelDays);
+  end else begin
+    td = AddDay(fromdate,PIr.PlannedDelDays);
+  end;
+
+
+  contf = false;
+  if PIr.MonFlag!=0 then begin
+    contf = True;
+  end;
+  if PIr.TueFlag!=0 then begin
+    contf = True;
+  end;
+  if PIr.WedFlag!=0 then begin
+    contf = True;
+  end;
+  if PIr.ThuFlag!=0 then begin
+    contf = True;
+  end;
+  if PIr.FriFlag!=0 then begin
+    contf = True;
+  end;
+  if PIr.SatFlag!=0 then begin
+    contf = True;
+  end;
+  if PIr.SunFlag!=0 then begin
+    contf = True;
+  end;
+
+  while (contf) begin
+    testf = false;
+    if (PIr.MonFlag!=0) then begin
+      if (GetDateId(td)==1) then begin testf = true; end;
+    end;
+    if (PIr.TueFlag!=0) then begin
+      if (GetDateId(td)==2) then begin testf = true; end;
+    end;
+    if (PIr.WedFlag!=0) then begin
+      if (GetDateId(td)==3) then begin testf = true; end;
+    end;
+    if (PIr.ThuFlag!=0) then begin
+      if (GetDateId(td)==4) then begin testf = true; end;
+    end;
+    if (PIr.FriFlag!=0) then begin
+      if (GetDateId(td)==5) then begin testf = true; end;
+    end;
+    if (PIr.SatFlag!=0) then begin
+      if (GetDateId(td)==6) then begin testf = true; end;
+    end;
+    if (PIr.SunFlag!=0) then begin
+      if (GetDateId(td)==7) then begin testf = true; end;
+    end;
+    if (testf) then begin
+      contf = false;
+      res = td;
+    end;
+    // stopalert("contf=" & contf & " res=" & res & " td=" & td);
+    if (contf) then begin
+      if prevoisDatef then begin
+        td = AddDay(td,-1);
+      end else begin
+        td = AddDay(td,1);
+      end;
+    end;
+  end;
+
+
+  BLT_GetPlanDelDate = res;
+  return;
+end;
+
+global
+function Boolean BLT_FindPI(var record PIVc PIr,string item,record INVc INr,string supplier,string location, boolean findAnyPI)
+begin
+  Boolean pifound;
+
+  if (nonblank(location)) then begin
+    PIr.DefaultChoice = 1;
+    PIr.ItemCode = item;
+    PIr.VECode = supplier;
+    PIr.Location = location;
+    pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+
+    if (pifound==false) then begin
+      PIr.DefaultChoice = 0;
+      PIr.ItemCode = item;
+      PIr.VECode = supplier;
+      PIr.Location = location;
+      pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+    end;
+  end;
+
+  if (pifound==false) then begin
+    PIr.DefaultChoice = 1;
+    PIr.ItemCode = item;
+    PIr.VECode = supplier;
+    PIr.Location = "";
+    pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+
+    if (pifound==false) then begin
+      PIr.DefaultChoice = 0;
+      PIr.ItemCode = item;
+      PIr.VECode = supplier;
+      PIr.Location = "";
+      pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+    end;
+  end;
+
+  if (pifound==false and nonblank(location)) then begin
+    PIr.DefaultChoice = 1;
+    PIr.ItemCode = INr.Code;
+    PIr.VECode = supplier;
+    PIr.Location = location;
+    pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+
+    if (pifound==false) then begin
+      PIr.DefaultChoice = 0;
+      PIr.ItemCode = INr.Code;
+      PIr.VECode = supplier;
+      PIr.Location = location;
+      pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+    end;
+  end;
+
+  if (pifound==false) then begin
+    PIr.DefaultChoice = 1;
+    PIr.ItemCode = INr.Code;
+    PIr.VECode = supplier;
+    PIr.Location = "";
+    pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+
+    if (pifound==false) then begin
+      PIr.DefaultChoice = 0;
+      PIr.ItemCode = INr.Code;
+      PIr.VECode = supplier;
+      PIr.Location = "";
+      pifound = ReadFirstKey("DefaultChoice",PIr,4,true);
+    end;
+  end;
+
+  if pifound==false and findAnyPI then begin
+    PIr.ItemCode = item;
+    PIr.Location = location;
+    pifound =  Readfirstmain(PIr,2,true);
+  end;
+
+  BLT_FindPI = pifound;
+end;
+
+global
+procedure POVc_GetPlanDeliveryDate(var record POVc POr)
+begin
+  row POVc POrw;
+  record PIVc PIr;
+  record INVc INr;
+  boolean infound, pifound;
+  string 255 item;
+
+  MatRowGet(POr,0,POrw);
+
+  item = POrw.ArtCode;
+  infound = GetFirstItem(item,INr);
+  if (infound==false) then begin
+    infound = ReadFirstItem(item,INr,true,false);
+    if (infound) then begin
+      if (item<>INr.Code) then begin
+        INr.Code = item;
+      end;
+    end;
+  end;
+
+  if (INr.Terminated<>0) then begin infound = false; end;
+  if (infound) then begin
+    if (pifound==false) then begin
+      pifound = BLT_FindPI(PIr,item,INr,POr.VECode,POr.Location,false);
+      if (pifound==false) then begin
+        pifound = BLT_FindPI(PIr,INr.Code,INr,POr.VECode,POr.Location,false);
+      end;
+      if pifound then begin
+        POr.PlanShip = BLT_GetPlanDelDate(PIr, POr.TransDate, false);
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+procedure PasteRowInTmpPOVc(record POVc POr,var record TmpPOVc tmpPOr,integer i)
+begin
+  row TmpPOVc TmpPOrw;
+  row POVc POrw;
+
+  MatRowGet(POr,i,POrw);
+  if nonblank(POrw.ArtCode) and POrw.ovst==0 then begin
+    TmpPOrw.ArtCode = POrw.ArtCode;
+    TmpPOrw.ArtName = POrw.Spec;
+    TmpPOrw.Quant = POrw.Quant - POrw.Shipd1;
+    TmpPOrw.BestBeforeDate = "";
+    TmpPOrw.SerialNr = "";
+    TmpPOrw.PORowNr = i;
+    MatRowPut(tmpPOr,MatRowCnt(tmpPOr),TmpPOrw);
+  end;
+
+  return;
+end;
+
+global
+procedure OpenTmpPODClass(record POVc POr)
+begin
+  record TmpPOVc TmpPOr;
+  integer i,rwc,nwn;
+
+  TmpPOr.SerNr = POr.SerNr;
+  if !ReadFirstMain(TmpPOr,1,true) then begin
+    RecordNew(TmpPOr);
+    TmpPOr.SerNr = POr.SerNr;
+    rwc = MatRowCnt(POr);
+    for(i=0;i<rwc;i=i+1)begin
+      PasteRowInTmpPOVc(POr,TmpPOr,i);
+    end;
+  end;
+
+  nwn = OpenWindow("TmpPODClass",0,0,"","",TmpPOr);
+
+  return;
+end;
+
+global
+updating function LongInt EBS_RecordAction_raPastePOInPU(var record POVc POp,var record PUVc PUp,
+                                                         array string arrItems,array val arrQtys,array string arrSerials,
+                                                         array date arrBestBefores,array integer arrPORows)
+BEGIN
+  LongInt res,ponr,newnr;
+  record SRBlock SRRec;
+
+  if (ReadFirstMain(POp,0,true)) then begin end;
+  if (POp.OrderType!=kOrderTypeNormal) then begin
+    res = 22075;
+    goto LRecordAction_raPastePOInPU;
+  end;
+  ponr = PUp.PONr;
+  RecordNew(PUp);
+  PUp.PONr = ponr;
+  if (PUp.SerNr==-1) then begin
+    BlockLoad(SRRec);
+    newnr = GetCurUserLastNr("PUVc");
+    if (newnr==-1) then begin
+      newnr = SRRec.LastPurNr;
+    end;
+    PUp.SerNr = NextSerNr("PUVc",PUp.TransDate,newnr,false,"");
+    if (PUp.SerNr==-1) then begin
+      res = 1747;
+      goto LRecordAction_raPastePOInPU;
+    end;
+  end;
+  AssignStockResFromPO(POp);
+  res = EBS_PastePOInPU(POp,PUp,199,arrItems,arrQtys,arrSerials,arrBestBefores,arrPORows);
+  if (res!=0) then begin
+    goto LRecordAction_raPastePOInPU;
+  end;
+  if ((MatRowCnt(PUp)>0) and (PUp.SerNr!=-1)) then begin
+    if (RecordStore(PUp,false)) then begin
+      CreateRecordLink(PUp,CurrentCompany,POp,CurrentCompany);
+      CreateRecordLink(POp,CurrentCompany,PUp,CurrentCompany);
+    end;
+    res = 0;
+  end;
+LRecordAction_raPastePOInPU:;
+  EBS_RecordAction_raPastePOInPU = res;
+  RETURN;
+END;
+
+procedure AddNetoWieghtToOutItem(record ProdVc Prodr,val t)
+begin
+  row ProdVc Prodrw;
+  integer i,rwc;
+
+  rwc = MatRowCnt(Prodr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(Prodr,i,Prodrw);
+    if Prodrw.OutQty>0 then begin
+      if Prodr.BoxCnt==0 then begin
+        Prodrw.OutQty = t;
+      end else begin
+        Prodrw.OutQty = Prodrw.OutQty + t;
+      end;
+      MatRowPut(Prodr,i,Prodrw);
+    end;
+  end;
+
+  return;
+end;
+
+global
+function val ProdVc_CalcNetoWeight(record ProdVc Prodr)
+begin
+  val res,t;
+  row ProdVc Prodrw;
+  record INVc INr;
+  record ITVc ITr;
+  integer i,rwc;
+
+  res = Prodr.TotOutWeight;
+  if nonblank(Prodr.DefBoxItem) then begin
+    if ReadFirstItem(Prodr.DefBoxItem,INr,true,true) then begin
+      res = res - INr.Weight;
+    end;
+  end;
+
+  t = 0;
+  rwc = MatRowCnt(Prodr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(Prodr,i,Prodrw);
+    if Prodrw.OutQty != 0 then begin
+      t = t + Prodrw.Weight;
+    end;
+    // if Prodrw.InQty!=0 then begin
+    //   if ReadFirstItem(Prodrw.Item,INr,true,true) then begin
+    //     ITr.Code = INr.Group;
+    //     if ReadFirstMain(ITr,1,true) then begin
+    //       if ITr.PackMaterial==1 then begin
+    //         t = INr.Weight * Prodr.Qty * Prodrw.InQty;
+    //         res = res - t;
+    //       end;
+    //     end;
+    //   end;
+    // end;
+  end;
+
+  res = res - t * Prodr.QtyInBox;
+  // AddNetoWieghtToOutItem(Prodr,res);
+
+  ProdVc_CalcNetoWeight = res;
+  return;
+end;
+
+global
+procedure BLT_FileSClassOnOpen(var array string arrStringList,var integer size,string mwnname)
+begin
+  record BLT_ScannerSetBlock BLT_ScannerSetr;
+  integer c,i;
+  string 255 tstr,fn;
+
+  BlockLoad(BLT_ScannerSetr);
+
+  switch (mwnname) begin
+    case "BLT_SHFromScannerVClass": tstr = BLT_ScannerSetr.SHImpFolder;
+    case "BLT_PUFromScannerVClass": tstr = BLT_ScannerSetr.PUImpFolder;
+  end;
+
+  if blank(tstr) then begin
+    GoTo LBLT_FileSClassOnOpen;
+  end;
+
+  c = CountFilesInDir(tstr);
+  for (i=c-1;i>=0;i=i-1) begin
+    fn = GetFileNameInDir(tstr,i);
+    if right(fn,4)==".xml" then begin
+      arrStringList[size] = fn;
+      size = size + 1;
+    end;
+  end;
+
+LBLT_FileSClassOnOpen:;
+  return;
+end;
+
+global
+procedure BLT_BoxItemsSClassOnOpen(var array string arrStringList,var integer size)
+begin
+  record ProdSettingsBlock ProdSettingsr;
+  record INVc INr;
+  string 255 tstr,fn;
+
+  BlockLoad(ProdSettingsr);
+
+  if blank(ProdSettingsr.BoxItemClass) then begin
+    GoTo LBLT_BoxItemsSClassOnOpen;
+  end;
+
+  INr.Code = "";
+  while LoopKey("DICode:" & ProdSettingsr.BoxItemClass,INr,1,true) begin
+    tstr = INr.Code & "   " & INr.Name;
+    arrStringList[size] = tstr;
+    size = size + 1;
+  end;
+
+LBLT_BoxItemsSClassOnOpen:;
+  return;
+end;
+
+function integer GetItemsInSerRegs(string itemcode, date ondate, longint ignorepu, longint ignoreprod)
+begin
+  record ProdVc Prodr;
+  row ProdVc Prodrw;
+  record PUVc PUr;
+  row PUVc PUrw;
+  boolean wloop;
+  integer res,i,rwc;
+
+  PUr.TransDate = ondate;
+  wloop = true;
+  While LoopKey("TransDate",PUr,1,wloop) begin
+    if PUr.TransDate != ondate then begin
+      wloop = false;
+    end else begin
+      if PUr.SerNr != ignorepu then begin
+        rwc = MatRowCnt(PUr);
+        for(i=0;i<rwc;i=i+1)begin
+          MatRowGet(PUr,i,PUrw);
+          if PUrw.ArtCode == itemcode and nonblank(PUrw.SerialNr) then begin
+            res = res + 1;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  Prodr.ProdDate = ondate;
+  wloop = true;
+  While LoopKey("ProdDate",Prodr,1,wloop) begin
+    if Prodr.ProdDate != ondate then begin
+      wloop = false;
+    end else begin
+      if Prodr.SerNr != ignoreprod then begin
+        rwc = MatRowCnt(Prodr);
+        for(i=0;i<rwc;i=i+1)begin
+          MatRowGet(Prodr,i,Prodrw);
+          if Prodrw.OutQty > 0 and Prodrw.Item == itemcode and nonblank(Prodrw.SerialNr) then begin
+            res = res + 1;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  GetItemsInSerRegs = res + 1;
+  return;
+end;
+
+function date FindNextDay(integer day_id, boolean use_current_date)
+begin
+  date ld, todat, res;
+
+  res = CurrentDate;
+  todat = AddDay(CurrentDate,10); //to avoid endless loop
+
+  if use_current_date then begin
+    ld = CurrentDate;
+  end else begin
+    ld = AddDay(CurrentDate,1);
+  end;
+
+  while (ld<=todat) begin
+    if GetDateId(ld) == day_id then begin
+      res = ld;
+      GoTo LFindNextDay;
+    end;
+    ld = AddDay(ld,1);
+  end;
+
+LFindNextDay:;
+  FindNextDay = res;
+  return;
+end;
+
+function date FindPrevDay(date td, record TimeClassVc TimeClassr)
+begin
+  date ld, todat, res;
+
+  res = td;
+  todat = AddDay(td,-7); //to avoid endless loop
+
+  ld = td;
+  while (ld>=todat) begin
+    switch (GetDateId(ld)) begin
+      case 1: if TimeClassr.Monday == 1 then begin res = ld; goto LFindPrevDay; end;
+      case 2: if TimeClassr.Tuesday == 1 then begin res = ld; goto LFindPrevDay; end;
+      case 3: if TimeClassr.Wednesday == 1 then begin res = ld; goto LFindPrevDay; end;
+      case 4: if TimeClassr.Thursday == 1 then begin res = ld; goto LFindPrevDay; end;
+      case 5: if TimeClassr.Friday == 1 then begin res = ld; goto LFindPrevDay; end;
+      case 6: if TimeClassr.Saturday == 1 then begin res = ld; goto LFindPrevDay; end;
+      case 7: if TimeClassr.Sunday == 1 then begin res = ld; goto LFindPrevDay; end;
+    end;
+
+    ld = AddDay(ld,-1);
+  end;
+
+LFindPrevDay:;
+  FindPrevDay = res;
+  return;
+end;
+
+global
+procedure BLT_GenSerForProdVc(var record ProdVc Prodr)
+begin
+  integer i,rwc,res;
+  row ProdVc Prodrw;
+  string 255 tstr;
+  vector integer itemsInRec;
+
+  rwc = MatRowCnt(Prodr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(Prodr,i,Prodrw);
+    if Prodrw.OutQty > 0 and nonblank(Prodrw.Item) then begin
+      res = GetItemsInSerRegs(Prodrw.Item, Prodr.ProdDate, -1, Prodr.SerNr);
+      if itemsInRec[Prodrw.Item] > 0 then begin
+        res = res + itemsInRec[Prodrw.Item];
+      end;
+      tstr = res;
+      if len(tstr) == 1 then begin
+        tstr = "0" & tstr;
+      end;
+      tstr = Prodr.SerNr & "/" & tstr;
+      Prodrw.SerialNr = tstr;
+      MatRowPut(Prodr,i,Prodrw);
+      itemsInRec[Prodrw.Item] = itemsInRec[Prodrw.Item] + 1;
+    end;
+  end;
+
+  return;
+end;
+
+global
+procedure BLT_GenSerForPUVc(var record PUVc PUr)
+begin
+  integer i,rwc,res;
+  row PUVc PUrw;
+  string 255 tstr;
+  vector integer itemsInRec;
+
+  rwc = MatRowCnt(PUr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(PUr,i,PUrw);
+    if nonblank(PUrw.ArtCode) then begin
+      res = GetItemsInSerRegs(PUrw.ArtCode, PUr.TransDate, PUr.SerNr, -1);
+      if itemsInRec[PUrw.ArtCode] > 0 then begin
+        res = res + itemsInRec[PUrw.ArtCode];
+      end;
+      tstr = res;
+      if len(tstr) == 2 then begin
+        tstr = "0" & tstr;
+      end;
+      if len(tstr) == 1 then begin
+        tstr = "00" & tstr;
+      end;
+
+      tstr = DateToString(PUr.TransDate,"YYMMDD") & PUr.VECode & "/" & tstr;
+      PUrw.SerialNr = tstr;
+      MatRowPut(PUr,i,PUrw);
+      itemsInRec[PUrw.ArtCode] = itemsInRec[PUrw.ArtCode] + 1;
+    end;
+  end;
+
+  return;
+end;
+
+global updating
+function longint EBS_ImportEDIOrdersRemote()
+begin
+  record BLT_EDISetBlock BLT_EDISetr;
+  string 255 importpath,fn;
+  longint res;
+  integer filecnt,i;
+  boolean no_errors;
+
+  BlockLoad(BLT_EDISetr);
+
+  res = 0;
+  if blank(BLT_EDISetr.ImpFolder) then begin
+    res = 1100021;
+    GoTo LEBS_ImportEDIOrdersRemote;
+  end;
+
+  importpath = BLT_EDISetr.ImpFolder;
+  if right(importpath,1) != "\\" and right(importpath,1) != "/" then begin
+    importpath = importpath & "\\";
+  end;
+
+  filecnt = CountFilesInDir(importpath);
+  for (i=filecnt-1;i>=0;i=i-1) begin
+    // LogText(0,"filename=" & GetFileNameInDir(importpath,i));
+     fn = GetFileNameInDir(importpath,i);
+     if right(fn,4) == ".xml" then begin
+       no_errors = EDI_ImportOneFile(importpath & fn);
+       if no_errors then begin
+         Delete_File(importpath & fn);
+       end else begin
+         res = 1100022;
+       end;
+     end;
+  end;
+
+LEBS_ImportEDIOrdersRemote:;
+  EBS_ImportEDIOrdersRemote = res;
+  return;
+end;
+
+global
+procedure PrintDeliveryAddress(record CUVc CUr)
+begin
+  record DelAddrVc DelAddrr;
+  boolean wloop,firstf;
+  integer rownr;
+
+  DelAddrr.CustCode = CUr.Code;
+  wloop = true;
+  While LoopKey("CustCode",DelAddrr,1,wloop) begin
+    if DelAddrr.CustCode != CUr.Code then begin
+      wloop = false;
+    end else begin
+      if !firstf then begin
+        StartFormat(15);
+        OutString(0,0,USetStr(9627),false);
+        EndFormat;
+        Black_Divider(0,1);
+        StartFormat(15);
+        OutString(0,0,USetStr(14343),false);
+        OutString(30,0,USetStr(17183),false);
+        OutString(120,0,USetStr(14307),false);
+        EndFormat;
+        Gray_Divider(0,1);
+        firstf = true;
+      end;
+      rownr = rownr + 1;
+      StartFormat(15);
+      OutString(0,0,rownr,false);
+      OutStringID(30,"dblDelAddrVc",DelAddrr.DelCode,false,DelAddrr.DelCode & ":" & DelAddrr.CustCode);
+      OutString(120,0,DelAddrr.DelAddr0,false);
+      EndFormat;
+    end;
+  end;
+
+  return;
+end;
+
+procedure AutoFillTmpPOrSerNr(var record TmpPOVc TmpPOr)
+begin
+  record POVc POr;
+  row TmpPOVc TmpPOrw;
+  integer i,rwc,res;
+  string 255 tstr;
+  date td;
+  string 20 vecode;
+  vector integer itemsInRec;
+
+  POr.SerNr = TmpPOr.SerNr;
+  ReadFirstMain(POr,1,true);
+
+  rwc = MatRowCnt(TmpPOr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(TmpPOr,i,TmpPOrw);
+    if nonblank(TmpPOrw.ArtCode) then begin
+      res = GetItemsInSerRegs(TmpPOrw.ArtCode, POr.TransDate, -1, -1);
+      if itemsInRec[TmpPOrw.ArtCode] > 0 then begin
+        res = res + itemsInRec[TmpPOrw.ArtCode];
+      end;
+      tstr = res;
+      if len(tstr) == 2 then begin
+        tstr = "0" & tstr;
+      end;
+      if len(tstr) == 1 then begin
+        tstr = "00" & tstr;
+      end;
+
+      tstr = DateToString(POr.TransDate,"YYMMDD") & POr.VECode & "/" & tstr;
+      TmpPOrw.SerialNr = tstr;
+      MatRowPut(TmpPOr,i,TmpPOrw);
+      itemsInRec[TmpPOrw.ArtCode] = itemsInRec[TmpPOrw.ArtCode] + 1;
+    end;
+  end;
+
+  return;
+end;
+
+global
+procedure GenSerialNoTmpPODsm()
+begin
+  record TmpPOVc TmpPOr;
+  Integer wn;
+
+  wn = CurWindow;
+  DeselectWindow(wn,false);
+  GetWindowRecord(wn,TmpPOr);
+
+  AutoFillTmpPOrSerNr(TmpPOr);
+  PutWindowRecord(wn,TmpPOr);
+
+  return;
+end;
+
+global
+procedure FillBLT_INSClass(string index,string sorting,string pricelist,string location,string custcode,
+                           var Array string acode,var Array string agroup,var Array string adesc,
+                           var Array string aaltcode,var Array val auprice,var Array val ainstock,
+                           var Integer acnt)
+begin
+  record PLVc PLr;
+  record INVc INr;
+  boolean wloop, testf;
+
+  if nonblank(pricelist) then begin
+    PLr.PLCode = pricelist;
+    wloop = true;
+    While LoopMain(PLr,1,wloop) begin
+      if PLr.PLCode != pricelist then begin
+        wloop = false;
+      end else begin
+        if (ReadFirstItem(PLr.ArtCode,INr,true,true)) then begin
+          acode[acnt] = INr.Code;
+          agroup[acnt] = INr.Group;
+          adesc[acnt] = INr.Name;
+          aaltcode[acnt] = INr.AlternativeCode;
+          auprice[acnt] = PLr.ExVatPrice;
+          ainstock[acnt] = ItemInStock(INr,location);
+          acnt = acnt + 1;
+        end;
+      end;
+    end;
+  end;
+
+  if nonblank(custcode) then begin
+    PLr.CustCode = custcode;
+    PLr.PLCode = "";
+    wloop = true;
+    ResetLoop(PLr);
+    While LoopKey("BLT_CustCode",PLr,2,wloop) begin
+      if PLr.CustCode != custcode or nonblank(PLr.PLCode) then begin
+        wloop = false;
+      end else begin
+        if (ReadFirstItem(PLr.ArtCode,INr,true,true)) then begin
+          acode[acnt] = INr.Code;
+          agroup[acnt] = INr.Group;
+          adesc[acnt] = INr.Name;
+          aaltcode[acnt] = INr.AlternativeCode;
+          auprice[acnt] = PLr.ExVatPrice;
+          ainstock[acnt] = ItemInStock(INr,location);
+          acnt = acnt + 1;
+        end;
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+global
+procedure FillBLT_INSClassPOVc(string index,string sorting,string vecode,string location,
+                           var Array string acode,var Array string agroup,var Array string adesc,
+                           var Array string aaltcode,var Array val auprice,var Array val ainstock,
+                           var Integer acnt)
+begin
+  record PIVc PIr;
+  record INVc INr;
+  boolean wloop;
+
+  PIr.VECode = vecode;
+  wloop = true;
+  While LoopKey("Vendor",PIr,1,wloop) begin
+    if PIr.VECode != vecode then begin
+      wloop = false;
+    end else begin
+      if (ReadFirstItem(PIr.ItemCode,INr,true,true)) then begin
+        acode[acnt] = INr.Code;
+        agroup[acnt] = INr.Group;
+        adesc[acnt] = INr.Name;
+        aaltcode[acnt] = INr.AlternativeCode;
+        auprice[acnt] = INr.UPrice1;
+        ainstock[acnt] = ItemInStock(INr,location);
+        acnt = acnt + 1;
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+global
+procedure BLT_CreateSBString(Integer SerNrf,string item,string serial,string location,val qty,Boolean qtyf,val cp,Boolean cpf,date bestbef,var string tstr)
+BEGIN
+  record SysFormatBlock SysFormatRec;
+  record ItemSettingBlock ItemSettingRec;
+  record QualConVc QCr;
+  record BatchTextVc btr;
+  record BatchStatusVc BSr;
+  Boolean found;
+  val q;
+  string 255 qstr;
+  string 255 t2,t3;
+  Date td;
+
+  q = 1;
+  BlockLoad(ItemSettingRec);
+  BlockLoad(SysFormatRec);
+  btr.ArtCode = item;
+  btr.SerialNr = serial;
+  ReadFirstMain(btr,2,true);
+  if (ItemSettingRec.BestBefore!=0) then begin
+    FindBatchBestBeforeDate(item,serial,td);
+    t2 = td;
+  end;
+  if (ItemSettingRec.BatchStatus!=0) then begin
+    QCr.OKFlag = 1;
+    QCr.ArtCode = item;
+    QCr.SerialNr = serial;
+    found = ReadLastKey("AnalyseDone",QCr,3,false);
+    if (found==true) then begin
+      if ((QCr.ArtCode==item) and (QCr.SerialNr==serial)) then begin
+        t3 = QCr.StatusCode;
+        BSr.Code = t3;
+        if (ReadFirstMain(BSr,1,true)) then begin
+          if (BSr.Warning==2) then begin
+            tstr = "";
+            goto LCreateSBString;
+          end;
+        end;
+      end;
+    end;
+  end;
+  tstr = serial;
+  M4PadString(tstr,len(serial)+2," ",false,tstr);
+  tstr = tstr & location;
+  if (qtyf) then begin
+    if (qty!=q) or (SerNrf==2) then begin
+      qstr = ValToString(qty,M4UVal,SysFormatRec.thousSep,SysFormatRec.decimalPt,0);
+      M4PadString(tstr,42," ",false,tstr);
+      tstr = tstr & qstr;
+    end;
+  end;
+  if (nonblank(t2)) then begin
+    tstr = tstr & "   ";
+    tstr = tstr & t2;
+  end;
+  if (cpf) then begin
+    if (nonblank(cp)) then begin
+      qstr = ValToString(cp,M4UVal,SysFormatRec.thousSep,SysFormatRec.decimalPt,0);
+      M4PadString(tstr,62," ",false,tstr);
+      tstr = tstr & qstr;
+    end;
+    if (nonblank(t2)) then begin
+      tstr = tstr & "   ";
+      tstr = tstr & t2;
+    end;
+  end;
+  if (nonblank(t3)) then begin
+    tstr = tstr & "   ";
+    tstr = tstr & t3;
+  end;
+  if nonblankdate(bestbef) then begin
+    M4PadString(tstr,len(tstr)+5," ",false,tstr);
+    tstr = tstr & bestbef;
+  end;
+  if (nonblank(btr.Comment)) then begin
+    M4PadString(tstr,len(tstr)+5," ",false,tstr);
+    tstr = tstr & btr.Comment;
+  end;
+LCreateSBString:;
+  RETURN;
+END;
+
+global
+function boolean BLT_CheckSHRowBestBefore(record SHVc SHr,row SHVc SHrw)
+begin
+  record BLT_EDISetBlock BLT_EDISetBl;
+  record ORVc ORr;
+  row ORVc ORrw;
+  boolean res;
+
+  res = true;
+
+  BlockLoad(BLT_EDISetBl);
+  if BLT_EDISetBl.DoNotCheckBesfBef==1 and SHr.BLT_EDIImportf==1 then begin
+    GoTo LBLT_CheckSHRowBestBefore;
+  end;
+
+  if SHrw.OrdRow != -1 and nonblankdate(SHrw.BestBefore) then begin
+    ORr.SerNr = SHr.OrderNr;
+    if ReadFirstMain(ORr,1,true) then begin
+      if SHrw.OrdRow <= MatRowCnt(ORr) then begin
+        MatRowGet(ORr,SHrw.OrdRow,ORrw);
+        if nonblankdate(ORrw.MinBestBefore) and SHrw.BestBefore < ORrw.MinBestBefore then begin
+          res = false;
+          GoTo LBLT_CheckSHRowBestBefore;
+        end;
+        if nonblankdate(ORrw.MaxBestBefore) and SHrw.BestBefore > ORrw.MaxBestBefore then begin
+          res = false;
+          GoTo LBLT_CheckSHRowBestBefore;
+        end;
+      end;
+    end;
+  end;
+
+LBLT_CheckSHRowBestBefore:;
+  BLT_CheckSHRowBestBefore = res;
+  return;
+end;
+
+global
+function boolean BLT_CheckBestBefore(record SHVc SHr, integer rownr)
+begin
+  record CUINVc CUINr;
+  row SHVc SHrw;
+  boolean res;
+
+  res = true;
+  if rownr >= 0 then begin
+    MatRowGet(SHr,rownr,SHrw);
+    if NonBlankDate(Shrw.BestBefore) then begin
+      CUINr.CustCode = SHr.CustCode;
+      CUINr.ArtCode = SHrw.ArtCode;
+      if ReadFirstMain(CUINr,2,true) then begin
+        if CUINr.BLT_MinDays > 0 then begin
+          if AddDay(SHr.ShipDate,CUINr.BLT_MinDays) > SHrw.BestBefore then begin
+            res = false;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  BLT_CheckBestBefore = res;
+  return;
+end;
+
+global
+procedure BLT_UpdatePIPriceVc_PasteVECode(var record BLT_UpdatePIPriceVc BLT_UpdatePIPricer)
+begin
+  row BLT_UpdatePIPriceVc BLT_UpdatePIPricerw;
+  record PIVc PIr;
+  record INVc INr;
+  record CUVc VEr;
+  integer i,rwc;
+  boolean wloop;
+
+  if nonblank(BLT_UpdatePIPricer.VECode) then begin
+    VEr.Code = BLT_UpdatePIPricer.VECode;
+    ReadFirstMain(VEr,1,true);
+    BLT_UpdatePIPricer.VEName = VEr.Name;
+
+    PIr.VECode = BLT_UpdatePIPricer.VECode;
+    wloop = true;
+    While LoopKey("Vendor",PIr,1,wloop) begin
+      if PIr.VECode != BLT_UpdatePIPricer.VECode then begin
+        wloop = false;
+      end else begin
+        INr.Code = PIr.ItemCode;
+        ReadFirstMain(INr,1,true);
+        BLT_UpdatePIPricerw.ArtCode = PIr.ItemCode;
+        BLT_UpdatePIPricerw.Spec = INr.Name;
+        BLT_UpdatePIPricerw.OldPrice = PIr.PurPrice;
+        MatRowPut(BLT_UpdatePIPricer,MatRowCnt(BLT_UpdatePIPricer),BLT_UpdatePIPricerw);
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+global updating
+procedure BLT_RunUpdatePIPrices(record BLT_UpdatePIPriceVc BLT_UpdatePIPricer)
+begin
+  row BLT_UpdatePIPriceVc BLT_UpdatePIPricerw;
+  record PIVc PIr,oldPIr;
+  integer i,rwc;
+
+  rwc = MatRowCnt(BLT_UpdatePIPricer);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(BLT_UpdatePIPricer,i,BLT_UpdatePIPricerw);
+    if nonblank(BLT_UpdatePIPricerw.ArtCode) then begin
+      PIr.VECode = BLT_UpdatePIPricer.VECode;
+      PIr.ItemCode = BLT_UpdatePIPricerw.ArtCode;
+      if ReadFirstKey("Vendor",PIr,2,true) then begin
+        if PIr.PurPrice != BLT_UpdatePIPricerw.NewPrice then begin
+          RecordCopy(oldPIr,PIr);
+          PIr.PurPrice = BLT_UpdatePIPricerw.NewPrice;
+          if RecordUpdate(oldPIr,PIr,true) != 0 then begin
+            LogText(0,"BLT_RunUpdatePIPrices ERROR :: Could not update PIVc record " & PIr.VECode & " " & PIr.ItemCode);
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+global
+procedure BLT_CalculateTotWeights(var record IVVc IVr)
+begin
+  record INVc INr;
+  row IVVc IVrw;
+  integer i,rwc;
+  val totweight, totnetoweight;
+
+  rwc = MatRowCnt(IVr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(IVr,i,IVrw);
+    if nonblank(IVrw.ArtCode) and IVrw.stp == kInvoiceRowTypeNormal then begin
+      if (ReadFirstItem(IVrw.ArtCode,INr,true,true)) then begin
+        totweight = totweight + IVrw.Quant * INr.Weight;
+        totnetoweight = totnetoweight + IVrw.Quant * INr.NetWeight;
+      end;
+    end;
+  end;
+
+  IVr.BLT_TotalWeight = totweight;
+  IVr.BLT_TotalNetWeight = totnetoweight;
+
+  return;
+end;
+
+global
+procedure FillBLT_VESClass(string index,string sorting,string itemcode,
+                           var Array string acode,var Array string asearchkey,var Array string acat,
+                           var Array string aname,var Integer acnt)
+begin
+  record PIVc PIr;
+  record CUVc VEr;
+  boolean wloop;
+
+  PIr.ItemCode = itemcode;
+  wloop = true;
+  While LoopMain(PIr,1,wloop) begin
+    if PIr.ItemCode != itemcode then begin
+      wloop = false;
+    end else begin
+      VEr.Code = PIr.VECode;
+      if ReadFirstMain(VEr,1,true) then begin
+        acode[acnt] = VEr.Code;
+        asearchkey[acnt] = VEr.SearchKey;
+        acat[acnt] = VEr.VECat;
+        aname[acnt] = VEr.Name;
+        acnt = acnt + 1;
+      end;
+    end;
+  end;
+
+  return;
+end;
+
+global
+function date AdjustProdStartDate(date td, string ItemCode) begin
+  date res;
+  record RecVc Recr;
+  record INVc INr;
+  record TimeClassVc TimeClassr;
+
+  res = td;
+
+  if (ReadFirstItem(itemcode,INr,true,true)) then begin
+    Recr.Code = INr.Recepy;
+    if ReadFirstMain(Recr,1,true) then begin
+      if nonblank(Recr.TimeClass) then begin
+        TimeClassr.Code = Recr.TimeClass;
+        if ReadFirstMain(TimeClassr,1,true) then begin
+          res = FindPrevDay(td, TimeClassr);
+        end;
+      end;
+    end;
+  end;
+
+  AdjustProdStartDate = res;
+  return;
+end;
+
+global
+function boolean ChecPIVcBestBeforeDays(string vecode,string itemcode,date checkdate,date bestbefore)
+begin
+  record PIVc PIr;
+  boolean res;
+
+  res = true;
+  if blankdate(bestbefore) then begin
+    GoTo LChecPIVcBestBeforeDays;
+  end;
+
+  if blankdate(checkdate) then begin
+    GoTo LChecPIVcBestBeforeDays;
+  end;
+
+  PIr.VECode = vecode;
+  PIr.ItemCode = itemcode;
+  if ReadFirstKey("Vendor",PIr,2,true) then begin
+    if PIr.MinBestBeforeDays > 0 then begin
+      if AddDay(checkdate,PIr.MinBestBeforeDays) > bestbefore then begin
+        res = false;
+      end;
+    end;
+  end;
+
+LChecPIVcBestBeforeDays:;
+  ChecPIVcBestBeforeDays = res;
+  return;
+end;
+
+global
+procedure EBS_AddSerialNrToPordVc(var record ProdVc Prodr)
+begin
+  integer i,rwc;
+  row ProdVc Prodrw,cProdrw;
+  record INVc INr;
+  longint errmsg;
+  string 255 cursernr;
+  date bestbefore;
+  val remnp;
+
+  rwc = MatRowCnt(Prodr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(Prodr,i,Prodrw);
+    if Prodrw.InQty > 0 then begin
+      if ReadFirstItem(Prodrw.Item,INr,true,false) then begin
+        if INr.SerNrf != 0 then begin
+          remnp = Prodrw.InQty;
+          cursernr = "";
+          bestbefore = "";
+          While Prod_PasteBatchSerItems2(cursernr,bestbefore,i,remnp,Prodr,errmsg)==false begin
+            CopyRow(Prodr,Prodrw,cProdrw);
+            cProdrw.InQty = remnp;
+            cProdrw.SerialNr = "";
+            i = i + 1;
+            MatRowInsert(Prodr,i,cProdrw);
+            rwc = rwc + 1;
+          end;
+        end;
+      end;
+    end;
+
+  end;
+
+  return;
+end;
+
+global
+procedure SalesForecastSumUp(var record SalesForecastVc SFr)
+begin
+  row SalesForecastVc SFrw;
+  integer i,rwc;
+  val totqty, totsum;
+
+  rwc = MatRowCnt(SFr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SFr,i,SFrw);
+    totqty = totqty + SFrw.Qty;
+    totsum = totsum + SFrw.Sum;
+  end;
+
+  SFr.BLT_TotQty = totqty;
+  SFr.BLT_TotSum = totsum;
+
+  return;
+end;
+
+function boolean GetPriceListPrice(string artcode,string plcode,string custcode,var val price)
+BEGIN
+  record PLVc PLr;
+  boolean res;
+
+  PLr.CustCode = custcode;
+  PLr.ArtCode = artcode;
+  PLr.PLCode = "";
+  if ReadFirstKey("BLT_ArtCode",PLr,3,true) then begin
+    price = PLr.ExVatPrice;
+    res = true;
+  end;
+
+  if (!res and nonblank(plcode)) then begin
+    PLr.ArtCode = artcode;
+    PLr.PLCode = plcode;
+    if (ReadFirstMain(PLr,2,true)) then begin
+      price = PLr.ExVatPrice;
+      res = true;
+    end;
+  end;
+
+  GetPriceListPrice = res;
+  RETURN;
+END;
+
+global
+function val BLT_FindCustomerPrice(string CustCode, record INVc INr)
+begin
+  val res, t;
+  string 255 plist;
+
+  res = INr.UPrice1;
+  if blank(CustCode) then begin
+    GoTo LBLT_FindCustomerPrice;
+  end;
+
+  plist = GetCustomerPriceList(custcode);
+  if GetPriceListPrice(INr.Code, plist, CustCode, t) then begin
+    res = t;
+  end;
+
+LBLT_FindCustomerPrice:;
+  BLT_FindCustomerPrice = res;
+  return;
+end;
+
+global
+function boolean BLT_ChcekINrsCustomer(string filename, longint sernr, string customer)
+begin
+  record IVVc IVr;
+  record SHVc SHr;
+  record RetVc Retr;
+  boolean res;
+
+  if filename == "IVVc" then begin
+    IVr.SerNr = sernr;
+    if ReadFirstMain(IVr,1,true) then begin
+      if IVr.CustCode == customer then begin
+        res = true;
+      end;
+    end;
+  end;
+
+  if filename == "SHVc" then begin
+    SHr.SerNr = sernr;
+    if ReadFirstMain(SHr,1,true) then begin
+      if SHr.CustCode == customer then begin
+        res = true;
+      end;
+    end;
+  end;
+
+  if filename == "RetVc" then begin
+    Retr.SerNr = sernr;
+    if ReadFirstMain(Retr,1,true) then begin
+      if Retr.CustCode == customer then begin
+        res = true;
+      end;
+    end;
+  end;
+
+  BLT_ChcekINrsCustomer = res;
+  return;
+end;
+
+updating
+procedure StartEDIAutoTask(string task_code, time task_time, string arg)
+begin
+  date td;
+  integer day_id;
+
+  switch (arg) begin
+    case "MON": day_id = 1;
+    case "TUE": day_id = 2;
+    case "WED": day_id = 3;
+    case "THU": day_id = 4;
+    case "FRI": day_id = 5;
+    case "SAT": day_id = 6;
+    case "SUN": day_id = 7;
+  end;
+
+  td = FindNextDay(day_id, true);
+  if td == CurrentDate and task_time <= CurrentTime then begin
+    td = FindNextDay(day_id, false);
+  end;
+  LogText(0,"StartEDIAutoTask Scheduling next start for task " & task_code & " for " & td & " " & task_time);
+  NewTimedTask(task_code,"Auto import for EDI orders","EDIAutoImportTask",arg,td,task_time,"","");
+
+  return;
+end;
+
+global updating
+procedure LaunchEdiAutoImportTasks(boolean stopexisting, record BLT_EDISetBlock BLT_EDISetr)
+begin
+  string 255 task_code, arg;
+  time task_time;
+
+  if stopexisting then begin
+    RemoveTask("EDISOIMPORT_MON_TASK");
+    RemoveTask("EDISOIMPORT_TUE_TASK");
+    RemoveTask("EDISOIMPORT_WED_TASK");
+    RemoveTask("EDISOIMPORT_THU_TASK");
+    RemoveTask("EDISOIMPORT_FRI_TASK");
+    RemoveTask("EDISOIMPORT_SAT_TASK");
+    RemoveTask("EDISOIMPORT_SUN_TASK");
+  end;
+
+  if BLT_EDISetr.MonFlag == 1 then begin
+    arg = "MON";
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    task_time = BLT_EDISetr.MonTime;
+    StartEDIAutoTask(task_code,task_time,arg);
+  end;
+  if BLT_EDISetr.TueFlag == 1 then begin
+    arg = "TUE";
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    task_time = BLT_EDISetr.TueTime;
+    StartEDIAutoTask(task_code,task_time,arg);
+  end;
+  if BLT_EDISetr.WedFlag == 1 then begin
+    arg = "WED";
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    task_time = BLT_EDISetr.WedTime;
+    StartEDIAutoTask(task_code,task_time,arg);
+  end;
+  if BLT_EDISetr.ThuFlag == 1 then begin
+    arg = "THU";
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    task_time = BLT_EDISetr.ThuTime;
+    StartEDIAutoTask(task_code,task_time,arg);
+  end;
+  if BLT_EDISetr.FriFlag == 1 then begin
+    arg = "FRI";
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    task_time = BLT_EDISetr.FriTime;
+    StartEDIAutoTask(task_code,task_time,arg);
+  end;
+  if BLT_EDISetr.SatFlag == 1 then begin
+    arg = "SAT";
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    task_time = BLT_EDISetr.SatTime;
+    StartEDIAutoTask(task_code,task_time,arg);
+  end;
+  if BLT_EDISetr.SunFlag == 1 then begin
+    arg = "SUN";
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    task_time = BLT_EDISetr.SunTime;
+    StartEDIAutoTask(task_code,task_time,arg);
+  end;
+
+  return;
+end;
+
+global updating
+procedure EDIAutoImportTask(string arg)
+begin
+  record BLT_EDISetBlock BLT_EDISetr;
+  string 255 task_code;
+  integer day_id;
+  time task_time;
+  boolean testf;
+  longint res;
+
+  // Do importing
+  res = EBS_ImportEDIOrdersRemote;
+  LogText(0,"EDIAutoImportTask STARTED TASK EXECUTION, result code " & res);
+
+  // Start next task
+  BlockLoad(BLT_EDISetr);
+  testf = false;
+  switch (arg) begin
+    case "MON":
+      task_time = BLT_EDISetr.MonTime;
+      testf = BLT_EDISetr.MonFlag == 1;
+    case "TUE":
+      task_time = BLT_EDISetr.TueTime;
+      testf = BLT_EDISetr.TueFlag == 1;
+    case "WED":
+      task_time = BLT_EDISetr.WedTime;
+      testf = BLT_EDISetr.WedFlag == 1;
+    case "THU":
+      task_time = BLT_EDISetr.ThuTime;
+      testf = BLT_EDISetr.ThuFlag == 1;
+    case "FRI":
+      task_time = BLT_EDISetr.FriTime;
+      testf = BLT_EDISetr.FriFlag == 1;
+    case "SAT":
+      task_time = BLT_EDISetr.SatTime;
+      testf = BLT_EDISetr.SatFlag == 1;
+    case "SUN":
+      task_time = BLT_EDISetr.SunTime;
+      testf = BLT_EDISetr.SunFlag == 1;
+  end;
+
+  if testf then begin
+    task_code = "EDISOIMPORT_" & arg & "_TASK";
+    StartEDIAutoTask(task_code, task_time, arg);
+  end;
+
+  return;
+end;

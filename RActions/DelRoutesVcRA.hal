@@ -1,0 +1,26 @@
+
+//No inner function for this register
+global
+function LongInt DelRouteVcRecordCheck(Var Record DelRouteVc DelRouter, Record DelRouteVc DelRoute2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+  row DelRouteVc DelRouterw;
+  integer i,rwc;
+
+  res = 0;
+  rwc = MatRowCnt(DelRouter);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(DelRouter,i,DelRouterw);
+    if nonblank(DelRouterw.CustCode) or nonblank(DelRouterw.Comment) then begin
+      if DelRouterw.DelOrder==-1 then begin
+        RecordCheckError(1058,"",i,"DelOrder");
+        res=-1;
+        GoTo EndDelRouteVcRecordCheck;
+      end;
+    end;
+  end;
+
+EndDelRouteVcRecordCheck:;
+  DelRouteVcRecordCheck = res;
+  return;
+end;

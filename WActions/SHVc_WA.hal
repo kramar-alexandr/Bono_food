@@ -1,0 +1,72 @@
+remote inner procedure SHVc_PasteShip(var record SHVc,var Integer);
+remote inner procedure SHSumUp(var record SHVc);
+remote function boolean BLT_CheckBestBefore(record SHVc, integer);
+
+procedure TransferImpQuantSH(var record SHVc SHr)
+begin
+  row SHVc SHrw;
+  integer i,rwc;
+
+  rwc = MatRowCnt(SHr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(SHr,i,SHrw);
+    if SHrw.stp==1 then begin
+      SHrw.Ship = SHrw.ImportQuant;
+      MatRowPut(SHr,i,SHrw);
+      SHVc_PasteShip(SHr,i);
+      SHSumUp(SHr);
+    end;
+  end;
+
+  return;
+end;
+
+global
+procedure BLT_TransImpQuantSHDsm()
+begin
+  integer wn;
+  record SHVc SHr;
+
+  wn = CurWindow;
+  GetWindowRecord(wn,SHr);
+
+  if SHr.OKFlag==1 then begin
+    Beep;
+    GoTo LBLT_TransImpQuantSHDsm;
+  end;
+
+  if SHr.BLT_Importf==0 then begin
+    Beep;
+    GoTo LBLT_TransImpQuantSHDsm;
+  end;
+
+  TransferImpQuantSH(SHr);
+  PutWindowRecord(wn,SHr);
+
+LBLT_TransImpQuantSHDsm:;
+
+  return;
+end;
+
+global
+function Boolean SHDClassAfterEditField(Integer wn,string fieldname,Integer fn, Integer rownr,Integer changed)
+begin
+  Boolean res;
+  record SHVc SHr;
+  row SHVc SHrw;
+
+  res = inner.SHDClassAfterEditField(wn,fieldname,fn,rownr,changed);
+
+  switch (fieldname) begin
+    case "SerialNr":
+      if changed!=0 then begin
+        GetWindowRecord(wn,SHr);
+        if !BLT_CheckBestBefore(SHr, rownr) then begin
+          MessageBox(1100026,"");
+        end;
+      end;
+  end;
+
+  SHDClassAfterEditField = res;
+  return;
+end;

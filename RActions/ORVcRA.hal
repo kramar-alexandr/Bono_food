@@ -1,0 +1,126 @@
+external function boolean BLT_ExportEDI_ORVc(var record ORVc);
+
+global
+updating function LongInt ORVcRecordCheck(record ORVc ORr,record ORVc OR2r,LongInt stat,LongInt check)
+begin
+  LongInt res;
+  record DelRouteVc DelRouter;
+  row ORVc ORrw;
+  integer dateid,i,rwc;
+  boolean testf,okf;
+
+  if stat==Rs_insert and ORr.OKFlag==1 then begin
+    okf = true;
+  end;
+  if stat==Rs_update and ORr.OKFlag==1 and OR2r.OKFlag!=1 then begin
+    okf = true;
+  end;
+
+  if blank(ORr.Sorting) then begin
+    RecordCheckError(1058,"",-1,"Sorting");
+    res = -1;
+    goto LORVcRecordCheck;
+  end;
+
+  if nonblank(ORr.Sorting) then begin
+    DelRouter.Code = ORr.Sorting;
+    if !ReadFirstMain(DelRouter,1,true) then begin
+      RecordCheckError(1120,ORr.Sorting,-1,"Sorting");
+      res = -1;
+      goto LORVcRecordCheck;
+    end;
+  end;
+
+  rwc = MatRowCnt(ORr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(ORr,i,ORrw);
+    if okf then begin
+      if blank(ORrw.Price) then begin
+        RecordCheckError(1058,"",i,"Price");
+        res = -1;
+        goto LORVcRecordCheck;
+      end;
+      if blank(ORrw.Quant) then begin
+        RecordCheckError(1058,"",i,"Quant");
+        res = -1;
+        goto LORVcRecordCheck;
+      end;
+    end;
+  end;
+
+  if nonblankdate(ORr.PlanShip) and nonblank(ORr.Sorting) then begin
+    dateid = GetDateId(ORr.PlanShip);
+    testf = true;
+    switch (dateid) begin
+      case 1: if DelRouter.MonFlag==0 then begin testf = false; end;
+      case 2: if DelRouter.TueFlag==0 then begin testf = false; end;
+      case 3: if DelRouter.WedFlag==0 then begin testf = false; end;
+      case 4: if DelRouter.ThuFlag==0 then begin testf = false; end;
+      case 5: if DelRouter.FriFlag==0 then begin testf = false; end;
+      case 6: if DelRouter.SatFlag==0 then begin testf = false; end;
+      case 7: if DelRouter.SunFlag==0 then begin testf = false; end;
+    end;
+
+    if !testf then begin
+      RecordCheckError(1100008,"",-1,"PlanShip");
+      res = -1;
+      goto LORVcRecordCheck;
+    end;
+  end;
+
+  res = inner.ORVcRecordCheck(ORr,OR2r,stat,check);
+
+LORVcRecordCheck:;
+  ORVcRecordCheck = res;
+  return;
+end;
+
+global
+updating function LongInt ORVcRecordSave(var record ORVc ORr,record ORVc OR2r,LongInt stat,LongInt long4)
+begin
+  LongInt res;
+  record LocationVc Locr;
+
+  res = inner.ORVcRecordSave(ORr,OR2r,stat,long4);
+
+  if (ORr.OKFlag==1 or ORr.Closed==1) then begin
+    Locr.Code = ORr.Location;
+    if ReadFirstMain(Locr,1,true) then begin
+      if Locr.AutoExpOR == 1 then begin
+        ORr.BLT_Importf = 1;
+        ORr.BLT_Exportf = 1;
+        if ORr.BLT_SentToLogistics==0 then begin
+          BLT_ExportEDI_ORVc(ORr);
+        end;
+      end;
+    end;
+  end;
+
+  ORVcRecordSave = res;
+  return;
+end;
+
+global
+updating function LongInt ORVcRecordUpdate(var record ORVc ORr,record ORVc OR2r,LongInt stat,LongInt long4)
+begin
+  LongInt res;
+  record LocationVc Locr;
+
+  res = inner.ORVcRecordUpdate(ORr,OR2r,stat,long4);
+
+  if ((ORr.OKFlag==1 and OR2r.OKFlag!=1) or (ORr.Closed==1 and OR2r.Closed!=1)) then begin
+    Locr.Code = ORr.Location;
+    if ReadFirstMain(Locr,1,true) then begin
+      if Locr.AutoExpOR == 1 then begin
+        ORr.BLT_Importf = 1;
+        ORr.BLT_Exportf = 1;
+        if ORr.BLT_SentToLogistics==0 then begin
+          BLT_ExportEDI_ORVc(ORr);
+        end;
+      end;
+    end;
+  end;
+
+  ORVcRecordUpdate = res;
+  return;
+end;

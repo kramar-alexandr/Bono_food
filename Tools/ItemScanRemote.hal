@@ -1,0 +1,193 @@
+external inner updating function Integer PastePOInPU(record POVc,record PUVc,Integer);
+external inner function LongInt GetCurUserLastNr(string);
+external inner function Boolean GetFirstItem(var string,var record INVc);
+external inner function Integer PUVc_PasteQuant(var record PUVc,Integer);
+
+procedure FillPUWithTmpDate(record TmpCHDSDVc TmpCHDSDr,var record PUVc PUp)
+begin
+	integer i,j,rwcnt,rwcnt2;
+	row TmpCHDSDVc TmpCHDSDrw;
+	record INVc INr;
+	row PUVc PUrw;
+	boolean foundrow;
+	val q1,q2,q3,q4;
+	record MainStockBlock MainStockRec;
+	
+	BlockLoad(MainStockRec);
+	
+	rwcnt = MatRowCnt(PUp);
+  for (i=0;i<rwcnt;i=i+1) begin
+  	MatRowGet(PUp,i,PUrw);
+  	
+  	foundrow = false;
+  	q1 = PUrw.Quant;
+  	q2 = PUrw.Quant2;
+  	q3 = PUrw.Quant3;
+  	q4 = PUrw.Quant4;
+  	
+  	PUrw.Quant = 0;
+  	PUrw.Quant2 = 0;
+  	PUrw.Quant3 = 0;
+  	PUrw.Quant4 = 0;
+  	rwcnt2 = MatRowCnt(TmpCHDSDr);
+	  for (j=0;j<rwcnt2;j=j+1) begin
+	  	MatRowGet(TmpCHDSDr,j,TmpCHDSDrw);
+	  	if (TmpCHDSDrw.Quant1 > 0) then begin
+				if GetFirstItem(TmpCHDSDrw.BarCode,INr) then begin
+					if (PUrw.ArtCode == INr.Code) then begin
+						if (TmpCHDSDrw.Quant1 <= q1) then begin
+							PUrw.Quant = PUrw.Quant + TmpCHDSDrw.Quant1;
+							PUrw.Quant2 = PUrw.Quant2 + TmpCHDSDrw.Quant2;
+							PUrw.Quant3 = PUrw.Quant3 + TmpCHDSDrw.Quant3;
+							PUrw.Quant4 = PUrw.Quant4 + TmpCHDSDrw.Quant4;
+							
+							PUrw.ExpirationDate = TmpCHDSDrw.BestBeforeDate;
+							if nonblank(TmpCHDSDrw.LotNr) then begin
+								PUrw.SerialNr = PUp.SerNr & "_" & TmpCHDSDrw.LotNr;
+							end else begin
+								PUrw.SerialNr = PUp.SerNr;
+							end;
+							PUrw.BestBefore = TmpCHDSDrw.ManufactureDate;
+							PUrw.ToPosCode = TmpCHDSDrw.PosNr;
+							
+							TmpCHDSDrw.Quant1 = 0;
+							TmpCHDSDrw.Quant2 = 0;
+							TmpCHDSDrw.Quant3 = 0;
+							TmpCHDSDrw.Quant4 = 0;
+							MatRowPut(TmpCHDSDr,j,TmpCHDSDrw);
+						end else begin
+							PUrw.Quant = q1;
+							PUrw.Quant2 = q2;
+							PUrw.Quant3 = q3;
+							PUrw.Quant4 = q4;
+							
+							PUrw.ExpirationDate = TmpCHDSDrw.BestBeforeDate;
+							if nonblank(TmpCHDSDrw.LotNr) then begin
+								PUrw.SerialNr = PUp.SerNr & "_" & TmpCHDSDrw.LotNr;
+							end else begin
+								PUrw.SerialNr = PUp.SerNr;
+							end;
+							PUrw.BestBefore = TmpCHDSDrw.ManufactureDate;
+							PUrw.ToPosCode = TmpCHDSDrw.PosNr;
+							
+							TmpCHDSDrw.Quant1 = TmpCHDSDrw.Quant1 - q1;
+							TmpCHDSDrw.Quant2 = TmpCHDSDrw.Quant2 - q2;
+							TmpCHDSDrw.Quant3 = TmpCHDSDrw.Quant3 - q3;
+							TmpCHDSDrw.Quant4 = TmpCHDSDrw.Quant4 - q4;
+							MatRowPut(TmpCHDSDr,j,TmpCHDSDrw);
+						end;
+						foundrow = true;
+					end;
+				end;
+			end;
+		end;
+		
+		if !(foundrow) then begin
+			MatRowDelete(PUp,i);
+			i = i - 1;
+			rwcnt = rwcnt - 1;
+		end else begin
+			MatRowPut(PUp,i,PUrw);
+			PUVc_PasteQuant(PUp,i);
+		end;
+  end;
+  
+  if (MainStockRec.dontAllowOverreceive == 0) then begin
+	  rwcnt2 = MatRowCnt(TmpCHDSDr);
+	  for (j=0;j<rwcnt2;j=j+1) begin
+	  	MatRowGet(TmpCHDSDr,j,TmpCHDSDrw);
+	  	if (TmpCHDSDrw.Quant1 > 0) then begin
+	  		rwcnt = MatRowCnt(PUp);
+			  for (i=rwcnt-1;i>=0;i=i-1) begin
+	    		MatRowGet(PUp,i,PUrw);
+			  	if GetFirstItem(TmpCHDSDrw.BarCode,INr) then begin
+						if (PUrw.ArtCode == INr.Code) then begin
+							PUrw.Quant = PUrw.Quant + TmpCHDSDrw.Quant1;
+							PUrw.Quant2 = PUrw.Quant2 + TmpCHDSDrw.Quant2;
+							PUrw.Quant3 = PUrw.Quant3 + TmpCHDSDrw.Quant3;
+							PUrw.Quant4 = PUrw.Quant4 + TmpCHDSDrw.Quant4;
+							
+							PUrw.ExpirationDate = TmpCHDSDrw.BestBeforeDate;
+							if nonblank(TmpCHDSDrw.LotNr) then begin
+								PUrw.SerialNr = PUp.SerNr & "_" & TmpCHDSDrw.LotNr;
+							end else begin
+								PUrw.SerialNr = PUp.SerNr;
+							end;
+							PUrw.BestBefore = TmpCHDSDrw.ManufactureDate;
+							PUrw.ToPosCode = TmpCHDSDrw.PosNr;
+							
+							TmpCHDSDrw.Quant1 = 0;
+							TmpCHDSDrw.Quant2 = 0;
+							TmpCHDSDrw.Quant3 = 0;
+							TmpCHDSDrw.Quant4 = 0;
+							MatRowPut(TmpCHDSDr,j,TmpCHDSDrw);
+							MatRowPut(PUp,i,PUrw);
+							PUVc_PasteQuant(PUp,i);
+							i = -1;
+						end;
+					end;
+			  end;
+	  	end;
+	  end;
+	end;
+	
+	return;
+end;
+
+global
+updating procedure RemoteCreateSDFromPO(longint SerNr)
+begin
+	record TmpCHDSDVc TmpCHDSDr;
+	LongInt res,ponr,newnr;
+  record SRBlock SRRec;
+  record POVc POp;
+  record PUVc PUp;
+	
+	TmpCHDSDr.SerNr = SerNr;
+	if ReadFirstMain(TmpCHDSDr,1,true) then begin
+		POp.SerNr = TmpCHDSDr.POSerNr;
+		if (ReadFirstMain(POp,1,true)) then begin			
+		  if (POp.OrderType!=kOrderTypeNormal) then begin 
+		    res = 22075;
+		    goto LRecordAction_raPastePOInPU;
+		  end;
+		  ponr = PUp.PONr;
+		  RecordNew(PUp);
+		  PUp.PONr = ponr;
+		  if (PUp.SerNr==-1) then begin
+		    BlockLoad(SRRec);
+		    newnr = GetCurUserLastNr("PUVc");
+		    if (newnr==-1) then begin
+		      newnr = SRRec.LastPurNr;      
+		    end;    
+		    PUp.SerNr = NextSerNr("PUVc",PUp.TransDate,newnr,false,"");
+		    if (PUp.SerNr==-1) then begin 
+		      res = 1747;
+		      goto LRecordAction_raPastePOInPU; 
+		    end;
+		  end;
+		  //AssignStockResFromPO(POp);
+		  res = PastePOInPU(POp,PUp,199);
+		  if (res!=0) then begin
+		    goto LRecordAction_raPastePOInPU;
+		  end;
+		  
+		  // wildd 2016.01.21. 16:39:25 izdzesam artikulus kas nav skeneti + samazinam/palielinam daudzumu ja atskiras
+		  FillPUWithTmpDate(TmpCHDSDr,PUp);
+		  
+		  if ((MatRowCnt(PUp)>0) and (PUp.SerNr!=-1)) then begin
+		    if (RecordStore(PUp,false)) then begin 
+		      CreateRecordLink(PUp,CurrentCompany,POp,CurrentCompany);  
+		      CreateRecordLink(POp,CurrentCompany,PUp,CurrentCompany);  
+		    end;
+		    res = 0;
+		  end;
+			LRecordAction_raPastePOInPU:;  
+		end;
+		
+		RecordDelete(TmpCHDSDr);
+		StepBack(TmpCHDSDr);
+	end;
+		
+	return;
+end;

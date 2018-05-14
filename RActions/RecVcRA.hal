@@ -1,0 +1,21 @@
+
+
+global
+function LongInt RecVcRecordCheck(var record RecVc Recr,record RecVc Rec2r,LongInt stat,LongInt long4)
+BEGIN
+  LongInt res;
+
+  res = inner.RecVcRecordCheck(Recr,Rec2r,stat,long4);
+
+  if res==0 then begin
+    if Recr.QtyInBox < 0 then begin
+      RecordCheckError(20265," 0",-1,"QtyInBox");
+      res = -1;
+      goto LRecVcRecordCheck;
+    end;
+  end;
+
+LRecVcRecordCheck:;
+  RecVcRecordCheck = res;
+  return;
+end;

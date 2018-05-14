@@ -1,0 +1,20 @@
+
+global
+updating function LongInt PIVcRecordCheck(var record PIVc PIr,record PIVc PI2r,LongInt stat,LongInt check)
+begin
+  LongInt res;
+  boolean testf;
+  integer i,rwc;
+
+  if PIr.MinBestBeforeDays < 0 then begin
+    RecordCheckError(1100033,"",-1,"MinBestBeforeDays");
+    res = -1;
+    goto LPIVcRecordCheck;
+  end;
+
+  res = inner.PIVcRecordCheck(PIr,PI2r,stat,check);
+
+LPIVcRecordCheck:;
+  PIVcRecordCheck = res;
+  return;
+end;

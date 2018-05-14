@@ -1,0 +1,102 @@
+external inner procedure ExportXmlNL(string);
+external inner procedure ExportXmlTagOpen(string);
+external inner procedure ExportXmlTagClose(string);
+external inner function string 255 ConvertXmlString(string,Boolean);
+external function Boolean BLT_CreateExpFile(string,string);
+
+updating
+procedure ExportOneINVc(var record INVc INr)
+begin
+  val lot;
+
+  lot = 0;
+
+  ExportXmlTagOpen("<product>");
+  ExportXmlNL("<id>" & INr.Code & "</id>");
+  ExportXmlNL("<name>" & ConvertXmlString(INr.Name,false) & "</name>");
+  ExportXmlNL("<unit>" & ConvertXmlString(INr.Unittext,false) & "</unit>");
+  ExportXmlNL("<barcode>" & ConvertXmlString(INr.BarCode,false) & "</barcode>");
+  ExportXmlNL("<box_barcode />");
+  ExportXmlNL("<ispriceinbarcode>" & ValToString(lot,M4UVal,"",".",0) & "</ispriceinbarcode>");
+  ExportXmlTagOpen("<lot_list>");
+  ExportXmlTagOpen("<lot>");
+  ExportXmlNL("<lot_id />");
+  ExportXmlNL("<quantity>" & ValToString(lot,M4UVal,"",".",0) & "</quantity>");
+  ExportXmlTagClose("</lot>");
+  ExportXmlTagClose("</lot_list>");
+  ExportXmlTagClose("</product>");
+
+  return;
+end;
+
+updating
+procedure ExportINVc(record RcVc RepSpec)
+begin
+  record INVc INr;
+  boolean wloop,testf;
+
+  SetExportCodePage("UTF-8");
+  ExportXmlNL("<?xml version=\"1.0\"?>");
+  ExportXmlTagOpen("<root>");
+  ExportXmlTagOpen("<product_list>");
+
+  wloop = true;
+  INr.Code = "";
+  While LoopMain(INr,1,wloop) begin
+    testf = true;
+    if testf then begin
+      ExportOneINVc(INr);
+    end;
+  end;
+
+  ExportXmlTagClose("</product_list>");
+  ExportXmlTagClose("</root>");
+
+  return;
+end;
+
+global updating
+procedure BLT_INToScannerMn(Record RcVc RepSpec)
+Begin
+  record BLT_ScannerSetBlock BLT_ScannerSetbl;
+  string 255 filename,tmpfile;
+
+  BlockLoad(BLT_ScannerSetbl);
+
+  if blank(BLT_ScannerSetbl.ItemExpFolder) then begin
+    LogText(0,"BLT_INToScannerMn ERROR :: Blank export folder, please check settings!");
+    GoTo LBLT_INToScannerMn;
+  end;
+
+  if blank(BLT_ScannerSetbl.ItemFileName) then begin
+    LogText(0,"BLT_INToScannerMn ERROR :: Blank export file name, please check settings!");
+    GoTo LBLT_INToScannerMn;
+  end;
+
+  SetFileOnServer(true); //thsi is needed for win server
+  filename = BLT_ScannerSetbl.ItemFileName;
+  tmpfile = "tmp/" & filename;
+
+  if FileExists(tmpfile) then begin
+    Delete_File(tmpfile);
+  end;
+
+  //Create export file
+  BLT_CreateExpFile(filename,"tmp");
+
+  //Open export file
+  OpenExportFile(tmpfile, true);
+
+  //Export INVc records
+  ExportINVc(RepSpec);
+
+  //Close file
+  CloseFile;
+
+  //Move file
+  MoveFile(filename,"tmp",BLT_ScannerSetbl.ItemExpFolder);
+  SetFileOnServer(false);
+
+LBLT_INToScannerMn:;
+return;
+end;

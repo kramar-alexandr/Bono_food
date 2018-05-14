@@ -1,0 +1,153 @@
+external inner function val StringToValue(string,Integer,string,string);
+remote function val ProdVc_CalcNetoWeight(record ProdVc);
+
+global
+function val ReadWeight()
+begin
+  record BLT_WeightSetBlock BLT_WeightSetr;
+  val res;
+  integer i;
+  string 20 char;
+
+  BlockLoad(BLT_WeightSetr);
+  i = OpenComPort(BLT_WeightSetr.Port,
+                  BLT_WeightSetr.PortCode,
+                  BLT_WeightSetr.BaudRate,
+                  BLT_WeightSetr.Parity,
+                  BLT_WeightSetr.DataLength,
+                  BLT_WeightSetr.StopBits,
+                  BLT_WeightSetr.FlowControl);
+  // i = OpenComPort(0,"COM1",9600,0,8,1,1);
+
+
+  i = OutComPort(0,chr(5)); //Sends ENQ
+  // Sleep(1);
+  ReadComPort(0,1); //Reads
+
+  i = OutComPort(0,chr(17)); //Sends DC1
+
+  //Sends DC2
+  // res = OutComPort(0,chr(18));
+  Sleep(1);
+
+  ReadComPort(0,2); //Reads SOH and STX
+
+  char = ReadComPort(0,1); //Reads STA
+  char = ReadComPort(0,1); //Sign
+  char = ReadComPort(0,6); //Reads weight
+  res = StringToValue(char,M45Val,"",".");
+  if char=="-" then begin
+    res = - res;
+  end;
+
+  char = ReadComPort(0,2); //Reads unit
+
+  //Read rest
+  ReadComPort(0,3);
+
+  CloseComPort(0);
+
+  // res = 20; //testing purpose
+  ReadWeight = res;
+  return;
+end;
+
+function boolean ReadWeightMultTimes(integer timescnt,var val weight)
+begin
+  integer i;
+  boolean res;
+
+  weight = 0;
+  for (i=0;i<timescnt;i=i+1) begin
+    weight = ReadWeight;
+    // weight = 100;
+    LogText2(0,"ReadWeightMultTimes INFO :: Pass number " & (i+1) & " got weight " & weight,kVerbosityDebugDetailed);
+    if weight > 0 then begin
+      res = true;
+      GoTo LReadWeightMultTimes;
+    end;
+  end;
+
+LReadWeightMultTimes:;
+  ReadWeightMultTimes = res;
+  return;
+end;
+
+global
+procedure SHVc_ReadWeightBtn()
+begin
+  record SHVc SHr;
+  row SHVc SHrw;
+  integer wn,rownr;
+  val t;
+
+  wn = CurWindow;
+  DeselectWindow(wn,true);
+  GetWindowRecord(wn,SHr);
+
+  if SHr.OKFlag==1 then begin
+    MessageBox(1100001,"");
+    GoTo LSHVc_ReadWeightBtn;
+  end;
+
+  if ReadWeightMultTimes(5,t) then begin
+    SHr.TotWeight = SHr.TotWeight + t;
+    SHr.Packages = SHr.Packages + 1;
+    PutWindowRecord(wn,SHr);
+  end else begin
+    MessageBox(1100003,"");
+  end;
+
+LSHVc_ReadWeightBtn:;
+  SelectWindow(wn);
+
+  return;
+end;
+
+global
+procedure ProdVc_ReadWeightBtn()
+begin
+  record ProdVc Prodr;
+  row ProdVc Prodrw;
+  integer wn,rownr;
+  val t;
+
+  wn = CurWindow;
+  DeselectWindow(wn,true);
+  GetWindowRecord(wn,Prodr);
+
+  if Prodr.PRStatusFlag==3 or Prodr.PRStatusFlag==5 then begin
+    MessageBox(1100002,"");
+    GoTo LProdVc_ReadWeightBtn;
+  end;
+
+  if ReadWeightMultTimes(5,t) then begin
+    Prodr.TotOutWeight = t;
+    Prodr.NetoWeight = ProdVc_CalcNetoWeight(Prodr);
+    Prodr.BoxCnt = Prodr.BoxCnt + 1;
+    PutWindowRecord(wn,Prodr);
+    // PrintDocument(Prodr,"BLT_ProdLabelsForm",false);
+  end else begin
+    MessageBox(1100003,"");
+  end;
+
+LProdVc_ReadWeightBtn:;
+  SelectWindow(wn);
+
+  return;
+end;
+
+global
+procedure ProdVc_PrintLabelsBtn()
+begin
+  record ProdVc Prodr;
+  integer wn;
+
+  wn = CurWindow;
+  DeselectWindow(wn,true);
+  GetWindowRecord(wn,Prodr);
+  // stopalert("sernr=" & Prodr.SerNr);
+  PrintDocument(Prodr,"BLT_ProdLabelsForm",false);
+
+  return;
+end;

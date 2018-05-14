@@ -1,0 +1,652 @@
+external inner function Date DateFromString(string,string);
+external inner function string 255 FindINObjects(string,string);
+external inner function Boolean ReadFirstItem(string,var record INVc,Boolean,Boolean);
+external inner function string 60 FindSerialNrAtPosition(string,string);
+external inner function string 20 FindFreePositionInDeliveryArea(record INVc,string,string,Array string,Integer);
+external inner procedure FindStockValueAtPosition(string,string,string,var record PISVc);
+external inner procedure SHMakeStockMovements(var Array record StockMovVc,var Integer,record SHVc,row SHVc,record INVc,string,string,string,string,Integer,Integer);
+external inner function string 20 FindPositionWithItem(string,string,val,string);
+external function val GetOneStockMovVolume(record StockMovVc);
+external function val GetItemVolume(string);
+external function string 20 GetPalletItemCode(string);
+external function string 20 GetALevelPosForItem(string,string);
+
+function val StockMovAlreadyAtThisPosition(string artcode,string position,string inlocation,Array record StockMovVc aStockMovr,Integer acnt,record StockMovVc StockMovp)
+BEGIN
+  val res;
+  Integer i,ai,rwcnt;
+  record StockMovVc StockMovr;
+  row StockMovVc StockMovrw;
+
+  for (ai=0;ai<acnt;ai=ai+1) begin
+    StockMovr = aStockMovr[ai];
+    rwcnt = MatRowCnt(StockMovr);
+    for (i=0;i<rwcnt;i=i+1) begin
+      MatRowGet(StockMovr,i,StockMovrw);
+      if ((StockMovrw.ArtCode==artcode) and (StockMovr.FrLocation==inlocation) and (StockMovrw.FrPosCode==position)) then begin
+        res = res + StockMovrw.Quant;
+        // goto LNEXTStockMov;
+      end;
+    end;
+LNEXTStockMov:;
+  end;
+
+  rwcnt = MatRowCnt(StockMovp);
+  for (i=0;i<rwcnt;i=i+1) begin
+    MatRowGet(StockMovp,i,StockMovrw);
+    if ((StockMovrw.ArtCode==artcode) and (StockMovr.FrLocation==inlocation) and (StockMovrw.FrPosCode==position)) then begin
+      res = res + StockMovrw.Quant;
+    end;
+  end;
+
+  StockMovAlreadyAtThisPosition = res;
+  RETURN;
+END;
+
+function val StockMovWithSerialnrAlreadyAtThisPosition(string artcode,string position,string inlocation,string serialnr,Array record StockMovVc aStockMovr,Integer acnt)
+begin
+  val res;
+  Integer i,ai,rwcnt;
+  record StockMovVc StockMovr;
+  row StockMovVc StockMovrw;
+
+  for (ai=0;ai<acnt;ai=ai+1) begin
+    StockMovr = aStockMovr[ai];
+    rwcnt = MatRowCnt(StockMovr);
+    for (i=0;i<rwcnt;i=i+1) begin
+      MatRowGet(StockMovr,i,StockMovrw);
+      if ((StockMovrw.ArtCode==artcode) and (StockMovr.FrLocation==inlocation) and (StockMovrw.FrPosCode==position) and (StockMovrw.SerialNr==serialnr or blank(serialnr))) then begin
+        res = res + StockMovrw.Quant;
+        // goto LNEXTStockMov;
+      end;
+    end;
+LNEXTStockMov:;
+  end;
+  StockMovWithSerialnrAlreadyAtThisPosition = res;
+  return;
+end;
+
+function val SHAlreadyAtThisPosition(record SHVc SHp,Integer rownr,string artcode,string inlocation,string position,string MainStock)
+BEGIN
+  val res;
+  Integer i;
+  string 20 location;
+  row SHVc SHrw;
+
+
+  for (i=0;i<rownr;i=i+1) begin
+    MatRowGet(SHp,i,SHrw);
+    location = SHrw.Location;
+    if (blank(location)) then begin
+      location = SHp.Location;
+    end;
+    if (blank(location)) then begin
+      location = MainStock;
+    end;
+    if ((SHrw.ArtCode==artcode) and (location==inlocation) and (SHrw.PosCode==position)) then begin
+      res = res + SHrw.Ship;
+    end;
+  end;
+  SHAlreadyAtThisPosition = res;
+  RETURN;
+END;
+
+procedure StockMovArtCodeData(string artcode,record INVc INp,record StockMovVc StockMovr,row StockMovVc StockMovrw,string frpos,string DeliveryPosCode,val qty,Integer shrow,
+                              Array string adelpos,var Integer adelposcnt,Boolean finddelposf,string SerialNr,longint ordernr)
+BEGIN
+  record POSVc POSr;
+
+  ClearRow(StockMovr,StockMovrw,1);
+  StockMovrw.Coefficient = INp.UnitCoefficient;
+  StockMovrw.ArtCode = artcode;
+  StockMovrw.Spec = INp.Name;
+  StockMovrw.BasePrice = INp.UPrice1;
+  StockMovrw.Objects = FindINObjects(INp.Objects,INp.Group);
+  StockMovrw.UnitXval = INp.Width;
+  StockMovrw.UnitYval = INp.Height;
+  StockMovrw.UnitZval = INp.Depth;
+  StockMovrw.FrPosCode = frpos;
+  if (finddelposf) then begin
+    StockMovrw.ToPosCode = FindFreePositionInDeliveryArea(INp,StockMovr.ToLocation,DeliveryPosCode,adelpos,adelposcnt);
+    POSr.Code = StockMovrw.ToPosCode;
+    if (ReadFirstMain(POSr,1,true)==false) then begin
+      StockMovrw.ToPosCode = DeliveryPosCode;
+    end else begin
+      if (INp.PalletHeight!=0) then begin
+        if (INp.PalletHeight>POSr.Height) then begin StockMovrw.ToPosCode = DeliveryPosCode; end;
+      end;
+    end;
+    if (StockMovrw.ToPosCode!=DeliveryPosCode) then begin
+      adelpos[adelposcnt] = StockMovrw.ToPosCode;
+      adelposcnt = adelposcnt + 1;
+    end;
+  end else begin
+    StockMovrw.ToPosCode = DeliveryPosCode;
+  end;
+  // LogText(0,"115  qty=" &  qty & " shrow=" & shrow & " ordernr=" & ordernr & " SerialNr=" & SerialNr & " frpos=" & frpos & " art=" & INp.Code & " topos=" & StockMovrw.ToPosCode);
+  StockMovrw.Quant = qty;
+  StockMovrw.SHRow = shrow;
+  StockMovrw.EBS_OrderNr = ordernr;
+  if (StockMovr.FileName=="COMB_SHVc" or StockMovr.FileName=="COMB2SHVc") and (nonblank(SerialNr)) then begin
+    StockMovrw.SerialNr = SerialNr;
+  end;
+  if (blank(StockMovrw.SerialNr)) then begin
+    StockMovrw.SerialNr = FindSerialNrAtPosition(INp.Code,frpos);
+  end;
+  // LogText(0,"125 Serial=" & StockMovrw.SerialNr);
+  return;
+end;
+
+procedure BLT_AddPalletItemToStockMovPos(var record StockMovVc StockMovr,longint ordernr,string frpos)
+begin
+  row StockMovVc pStockMovrw,lastStockMovrw;
+  record INVc locINr;
+  record PISVc pPISr;
+  record LocationVc Locationr;
+  Array string 20 adelpos;
+  Integer adelposcnt,i,rwc;
+
+  if MatRowCnt(StockMovr)==0 then begin
+    LogText(0,"BLT_AddPalletItemToStockMovPos ERROR :: Trying to add pallet to empty StockMovVc");
+    GoTo LBLT_AddPalletItemToStockMovPos;
+  end;
+
+  locINr.Code = GetPalletItemCode(StockMovr.FrLocation);
+  rwc = MatRowCnt(StockMovr);
+  MatRowGet(StockMovr,rwc-1,lastStockMovrw);
+  if lastStockMovrw.ArtCode!=locINr.Code then begin // if last item is pallet then do not add another
+    if (ReadFirstMain(locINr,1,true)) then begin
+      ClearRow(StockMovr,pStockMovrw,1);
+      StockMovArtCodeData(locINr.Code,locINr,StockMovr,pStockMovrw,frpos,lastStockMovrw.ToPosCode,1,-1,adelpos,adelposcnt,false,"",ordernr);
+      MatRowPut(StockMovr,rwc,pStockMovrw);
+    end;
+  end;
+
+LBLT_AddPalletItemToStockMovPos:;
+  RETURN;
+END;
+
+global
+procedure BLT_AddPalletItemToStockMov(var record StockMovVc StockMovr,Integer shrow,integer rw,longint ordernr)
+begin
+  row StockMovVc pStockMovrw,lastStockMovrw;
+  record INVc locINr;
+  record PISVc pPISr;
+  record LocationVc Locationr;
+  string 20 frpos;
+  Array string 20 adelpos;
+  Integer adelposcnt,i,rwc;
+
+  if MatRowCnt(StockMovr)==0 then begin
+    LogText(0,"BLT_AddPalletItemToStockMov ERROR :: Trying to add pallet to empty StockMovVc");
+    GoTo LBLT_AddPalletItemToStockMov;
+  end;
+
+  locINr.Code = GetPalletItemCode(StockMovr.FrLocation);
+  rwc = MatRowCnt(StockMovr);
+  MatRowGet(StockMovr,rwc-1,lastStockMovrw);
+  if lastStockMovrw.ArtCode!=locINr.Code then begin // if last item is pallet then do not add another
+    if (ReadFirstMain(locINr,1,true)) then begin
+      ClearRow(StockMovr,pStockMovrw,1);
+      Locationr.Code = StockMovr.FrLocation;
+      if ReadFirstMain(Locationr,1,true) then begin
+        frpos = Locationr.WHMPalletArea;
+        if blank(frpos) then begin
+          frpos = FindPositionWithItem(locINr.Code,StockMovr.FrLocation,1,lastStockMovrw.ToPosCode);
+        end;
+      end;
+      StockMovArtCodeData(locINr.Code,locINr,StockMovr,pStockMovrw,frpos,lastStockMovrw.ToPosCode,1,shrow,adelpos,adelposcnt,false,"",ordernr);
+      MatRowPut(StockMovr,rw,pStockMovrw);
+    end;
+  end;
+
+LBLT_AddPalletItemToStockMov:;
+  RETURN;
+END;
+
+procedure BLT_AddStockMovToArray(var Array record StockMovVc aStockMovr,var Integer acnt,var record StockMovVc StockMovr,string warehouse,LongInt shnr)
+BEGIN
+  transaction val totPalletVolume;
+
+  if (MatRowCnt(StockMovr)>0) then begin
+    StockMovr.TransDate = CurrentDate;
+    aStockMovr[acnt] = StockMovr;
+    acnt = acnt + 1;
+    RecordNew(StockMovr);
+    StockMovr.FrLocation = warehouse;
+    StockMovr.ToLocation = warehouse;
+    StockMovr.TransNr = shnr;
+    StockMovr.FileName = "SHVc";
+  end;
+
+  RETURN;
+END;
+
+function Boolean TestSerialNrAtPosition(string artcode,string serialnr,string position)
+begin
+  Boolean res;
+  record ItemHistVc IHr;
+  Boolean foundih,testf;
+
+  res = false;
+  ResetLoop(IHr);
+  foundih = true;
+  IHr.Position = position;
+  IHr.ArtCode = artcode;
+  while (LoopKey("Position",IHr,2,foundih)) begin
+    if (IHr.Position!=position) then begin foundih = false; end;
+    if (IHr.ArtCode!=artcode) then begin foundih = false; end;
+    if (foundih) then begin
+      testf = true;
+      if (IHr.SerialNr!=serialnr) then begin testf = false; end;
+      if (testf) then begin
+        res = true;
+        foundih = false;
+      end;
+    end;
+  end;
+  TestSerialNrAtPosition = res;
+  return;
+end;
+
+procedure StockMovementsforPosition(var Array record StockMovVc aStockMovr,var Integer acnt,record INVc INp,LongInt ordernr,
+                                       string artcode,string serialnr,string warehouse,string DeliveryPosCode,string DeliveryArea,
+                                       Integer shrow,var val rem,Array string adelpos,var Integer adelposcnt,record StockMovVc StockMovr,
+                                       var val freeVolOnPallet,var val remRowVolume,string position,vector val vecItemVals)
+BEGIN
+  record PISVc PISr;
+  Boolean TrHs,testf;
+  row StockMovVc StockMovrw;
+  val atpos,stmovqty,t,fullqty;
+  Integer rw;
+  string 255 variety;
+  record LocationVc Locr;
+
+  rw = MatRowCnt(StockMovr);
+  variety = right(artcode,len(artcode)-len(INp.Code));
+//  Posr.PickOrder = 999999;
+
+  PISr.ArtCode = INp.Code;
+  PISr.Position = position;
+  PISr.Location = warehouse;
+  PISr.Variety = variety;
+  testf = true;
+  if (ReadFirstMain(PISr,4,true)==false) then begin testf = false; end;
+  Locr.Code = PISr.Location;
+  ReadFirstMain(Locr,1,true);
+  if (PISr.LeftQty<=0) then begin testf = false; end;
+  if (PISr.Position==Locr.WHMDefPUPosCode) then begin testf = false; end;
+  if (PISr.Position==Locr.WHMDefProdPosCode) then begin testf = false; end;
+  if (PISr.Position==Locr.WHMWraperPosCode) then begin testf = false; end;
+  if (testf) then begin
+    if (nonblank(serialnr)) then begin
+      testf = TestSerialNrAtPosition(PISr.ArtCode,serialnr,PISr.Position);
+    end;
+  end;
+  if (testf) then begin
+    atpos = StockMovAlreadyAtThisPosition(PISr.ArtCode,PISr.Position,PISr.Location,aStockMovr,acnt,StockMovr);
+    // if (PISr.LeftQty<=atpos) then begin testf = false; end;
+  end;
+  // LogText(0,"art=" & INp.Code & " pos=" & position & " testf=" & testf);
+  if (testf) then begin
+    fullqty = rem;
+    if (rem<(PISr.LeftQty-atpos)) then begin
+      stmovqty = rem;
+    end else begin
+      stmovqty = PISr.LeftQty - atpos;
+      if stmovqty < 0 then begin
+        stmovqty = 0;
+      end;
+    end;
+    // LogText(0,"art=" & INp.Code & " pos=" & position & " fullqty=" & fullqty & " stmovqty=" & stmovqty & " rem=" & rem & " atpos=" & atpos & " PISr.LeftQty=" & PISr.LeftQty);
+    if (fullqty>0) then begin
+      //Allways add full quantity
+      StockMovArtCodeData(artcode,INp,StockMovr,StockMovrw,PISr.Position,DeliveryPosCode,fullqty,shrow,adelpos,adelposcnt,true,serialnr,ordernr);
+      MatRowPut(StockMovr,rw,StockMovrw);
+      rw = rw + 1;
+      // AddPalletItemToStockMov(StockMovr,stmovqty,INp,PISr.Position,warehouse,StockMovrw.ToPosCode,shrow,rw);
+      rem = rem - stmovqty; //This is quantity that is somewhere on upper shelves and needs to be taken down
+      vecItemVals[INp.Code] = vecItemVals[INp.Code] + rem; //tracks missing quantity
+      rem = 0;
+      t = fullqty * GetItemVolume(INp.Code);
+      remRowVolume =  remRowVolume - t;
+      freeVolOnPallet = freeVolOnPallet - t;
+    end;
+  end;
+  RETURN;
+END;
+
+procedure AddToBatchArray(string artcode,string position,string location,val qty,var record SoftFVc BatchArrayr)
+begin
+  row SoftFVc BatchArrayrw;
+  record ItemHistVc IHr;
+  record BatchTextVc BTr;
+  Boolean found,testf,sernrusedf;
+
+  found = true;
+  IHr.ArtCode = artcode;
+  found = true;
+  while (LoopBackKey("ActiveQty",IHr,1,found)) begin
+    if (found) then begin
+      if (IHr.ArtCode!=artcode) then begin found = false; end;
+    end;
+    if (found) then begin
+      testf = true;
+      if (IHr.Invalid!=0) then begin testf = false; end;
+      if (IHr.Position!=position) then begin testf = false; end;
+      if (IHr.Location!=location) then begin testf = false; end;
+      if (testf) then begin
+        BTr.ArtCode = artcode;
+        BTr.SerialNr = IHr.SerialNr;
+        if (ReadFirstMain(BTr,2,true)) then begin
+          ClearRow(BatchArrayr,BatchArrayrw,1);
+          BatchArrayrw.ArtCode = artcode;
+          BatchArrayrw.Location = location;
+          BatchArrayrw.Position = position;
+          BatchArrayrw.SerialNr = IHr.SerialNr;
+          BatchArrayrw.TransDate = BTr.BestBefore;
+          BatchArrayrw.Quant = qty;
+          MatRowPut(BatchArrayr,MatRowCnt(BatchArrayr),BatchArrayrw);
+        end;
+      end;
+    end;
+  end;
+  return;
+end;
+
+procedure AddToStockMovArrayInPrePos(var array record StockMovVc aStockMovr,var integer acnt,record StockMovVc StockMovp)
+begin
+  record StockMovVc StockMovr;
+
+  if acnt==0 then begin
+    aStockMovr[acnt] = StockMovp;
+  end else begin
+    StockMovr = aStockMovr[acnt-1];
+    aStockMovr[acnt-1] = StockMovp;
+    aStockMovr[acnt] = StockMovr;
+  end;
+  acnt = acnt + 1;
+
+  return;
+end;
+
+function Boolean AllQtyFromPosition(string position,string location,val qty)
+begin
+  record PISVc PISr;
+  Boolean res,TrHs;
+
+  res = false;
+  PISr.Location = location;
+  PISr.Position = position;
+
+  TrHs = true;
+  while (LoopKey("Position",PISr,2,TrHs)) begin
+    if (PISr.Position!=position) then begin TrHs = false; end;
+    if (PISr.Location!=location) then begin TrHs = false; end;
+    if (TrHs) then begin
+      if (PISr.LeftQty<=qty) then begin
+        res = true;
+        TrHs = false;
+      end;
+    end;
+  end;
+  AllQtyFromPosition = res;
+  return;
+end;
+
+procedure StockMovementsforRemQty_Forward_Batch(var Array record StockMovVc aStockMovr,var Integer acnt,record INVc INp,LongInt ordernr,
+                                  string artcode,string aserialnr,string warehouse,string DeliveryPosCode,string DeliveryArea,
+                                  Integer shrow,val trem,Array string adelpos,var Integer adelposcnt,longint shnr,var vector val vecItemVals)
+begin
+  record POSVc POSr;
+  record PISVc PISr;
+  Boolean TrHs,testf;
+  record StockMovVc StockMovr;
+  row StockMovVc StockMovrw;
+  val atpos,stmovqty,t;
+  Integer rw;
+  record LocationVc Locr;
+  string 255 variety;
+  string 255 serialnr;
+  record SoftFVc BatchArrayr;
+  row SoftFVc BatchArrayrw;
+  Integer i,rwcnt,ai;
+  val rem;
+
+  rem = trem;
+  serialnr = aserialnr;
+  variety = right(artcode,len(artcode)-len(INp.Code));
+  PISr.ArtCode = INp.Code;
+  PISr.Location = warehouse;
+//  PISr.PickOrder = 999999;
+  TrHs = true;
+  while (LoopKey("InstockItemLoc",PISr,3,TrHs)) begin
+    if (PISr.ArtCode!=INp.Code) then begin TrHs = false; end;
+    if (PISr.Location!=warehouse) then begin TrHs = false; end;
+    if (TrHs) then begin
+      testf = true;
+      Locr.Code = PISr.Location;
+      ReadFirstMain(Locr,1,true);
+      if (PISr.LeftQty<=0) then begin testf = false; end;
+      if (PISr.Position==Locr.WHMDefPUPosCode) then begin testf = false; end;
+      if (PISr.Position==Locr.WHMDefProdPosCode) then begin testf = false; end;
+      if (PISr.Position==Locr.WHMWraperPosCode) then begin testf = false; end;
+      if (nonblank(variety)) then begin
+        if (PISr.Variety!=variety) then begin testf = false; end;
+      end;
+      if (testf) then begin
+        POSr.Code = PISr.Position;
+        if (ReadFirstMain(POSr,1,true)==false) then begin testf = false; end;
+        if (POSr.Status!=1) then begin testf = false; end;
+        if (nonblank(POSr.LocArea)) then begin
+          if (POSr.LocArea==DeliveryArea) then begin testf = false; end;
+        end;
+      end;
+      if (testf) then begin
+        AddToBatchArray(PISr.ArtCode,PISr.Position,PISr.Location,PISr.LeftQty,BatchArrayr);
+      end;
+    end;
+  end;
+  SortRows(BatchArrayr,"TransDate",true);
+  rwcnt = MatRowCnt(BatchArrayr);
+  for (i=0;i<rwcnt;i=i+1) begin
+    MatRowGet(BatchArrayr,i,BatchArrayrw);
+    testf = true;
+    atpos = StockMovWithSerialnrAlreadyAtThisPosition(BatchArrayrw.ArtCode,BatchArrayrw.Position,BatchArrayrw.Location,BatchArrayrw.SerialNr,aStockMovr,acnt);
+    if (BatchArrayrw.Quant<=atpos) then begin testf = false; end;
+    if (testf) then begin
+      stmovqty = BatchArrayrw.Quant - atpos;
+      if (stmovqty>0) then begin
+        RecordNew(StockMovr);
+        StockMovr.FrLocation = warehouse;
+        StockMovr.ToLocation = warehouse;
+        StockMovr.TransNr = SHNr;
+        StockMovr.FileName = "Comb2SHVc";
+        StockMovArtCodeData(artcode,INp,StockMovr,StockMovrw,BatchArrayrw.Position,DeliveryPosCode,stmovqty,-1,adelpos,adelposcnt,false,BatchArrayrw.SerialNr,ordernr);
+        MatRowPut(StockMovr,0,StockMovrw);
+        AddToStockMovArrayInPrePos(aStockMovr,acnt,StockMovr);
+        if AllQtyFromPosition(BatchArrayrw.Position,warehouse,stmovqty) then begin
+          BLT_AddPalletItemToStockMovPos(StockMovr,-1,BatchArrayrw.Position);
+        end;
+        // rw = rw + 1;
+        // AddPalletItemToStockMov(StockMovr,stmovqty,INp,BatchArrayrw.Position,warehouse,StockMovrw.ToPosCode,shrow,1);
+        rem = rem - stmovqty;
+        vecItemVals[INp.Code] = vecItemVals[INp.Code] - stmovqty;
+      end;
+    end;
+    if (rem<=0) then begin
+      i = rwcnt;
+    end;
+  end;
+  return;
+end;
+
+procedure AddToToPosCodeArray(string ToPosCode,Array string adelpos,var Integer adelposcnt)
+BEGIN
+  Integer i;
+
+  for (i=0;i<adelposcnt;i=i+1) begin
+    if (ToPosCode==adelpos[i]) then begin
+      goto LAddToToPosCodeArray;
+    end;
+  end;
+  adelpos[adelposcnt] = ToPosCode;
+  adelposcnt = adelposcnt + 1;
+LAddToToPosCodeArray:;
+  RETURN;
+END;
+
+procedure BuildToPosCodeArray(record StockMovVc StockMovr,Array string adelpos,var Integer adelposcnt)
+BEGIN
+  row StockMovVc StockMovrw;
+  Integer i,rwcnt;
+
+  rwcnt = MatRowCnt(StockMovr);
+  for (i=0;i<rwcnt;i=i+1) begin
+    MatRowGet(StockMovr,i,StockMovrw);
+    AddToToPosCodeArray(StockMovrw.ToPosCode,adelpos,adelposcnt);
+  end;
+  RETURN;
+END;
+
+//EBS -->
+global
+procedure BLT_SHMakeStockMovements(var Array record StockMovVc aStockMovr,var Integer acnt,
+                                   record SHVc SHp,row SHVc SHrw,record INVc INp,string MainStock,
+                                   string DeliveryPosCode,string DeliveryArea,string warehouse,
+                                   Integer shrow,var vector val vecItemVals)
+BEGIN
+  string 20 location,ALevelPos,variety;
+  val rem,freeVolOnPallet,t,lrem,trem;
+  val remRowVolume,totMissingQty;
+  record LocationVc LocRec;
+  Array string 20 adelpos;
+  Integer adelposcnt;
+  record StockMovVc StockMovr;
+  Integer i;
+  boolean newstockmovf;
+
+  transaction val totPalletVolume;
+  transaction val custTotVolume;
+  transaction boolean newCustf;
+
+  if totPalletVolume==0 then begin
+    GoTo LBLT_SHMakeStockMovements;
+  end;
+
+  if custTotVolume==0 then begin
+    GoTo LBLT_SHMakeStockMovements;
+  end;
+
+  for (i=0;i<acnt;i=i+1) begin
+    StockMovr = aStockMovr[i];
+    BuildToPosCodeArray(StockMovr,adelpos,adelposcnt);
+  end;
+
+  location = SHrw.Location;
+  if (blank(location)) then begin
+    location = SHp.Location;
+  end;
+  if (blank(location)) then begin
+    location = MainStock;
+  end;
+
+  if (location!=warehouse) then begin goto LBLT_SHMakeStockMovements; end;
+  LocRec.Code = warehouse;
+  if (ReadFirstMain(LocRec,1,true)) then begin end;
+  if (LocRec.RequirePos==0) then begin goto LBLT_SHMakeStockMovements; end;
+
+  ALevelPos = GetALevelPosForItem(INp.Code,warehouse);
+  if blank(ALevelPos) then begin
+    LogText(0,"BLT_SHMakeStockMovements ERROR :: Cannot find A shelf for item " & INp.Code);
+    GoTo LBLT_SHMakeStockMovements;
+  end;
+
+  newstockmovf = false;
+  t = GetItemVolume(Shrw.ArtCode);
+  if t==0 then begin
+    LogText(0,"BLT_SHMakeStockMovements ERROR :: No volume specified for item " & SHrw.ArtCode);
+  end;
+  if t>totPalletVolume then begin
+    LogText(0,"BLT_SHMakeStockMovements ERROR :: Item volume larger than pallet volume " & SHrw.ArtCode);
+  end;
+
+  freeVolOnPallet = totPalletVolume;
+  if acnt>0 then begin
+    StockMovr = aStockMovr[acnt-1];
+    freeVolOnPallet = freeVolOnPallet - GetOneStockMovVolume(StockMovr);
+    if freeVolOnPallet<t then begin
+      newstockmovf = true;
+      // BLT_AddPalletItemToStockMov(StockMovr,warehouse,-1,MatRowCnt(StockMovr),SHp.OrderNr);
+      aStockMovr[acnt-1] = StockMovr;
+    end;
+  end else begin
+    newstockmovf = true;
+  end;
+
+  //Start new stock movement (pallet) if all customer stuff does not fit on existing
+  if !newstockmovf and newCustf then begin
+    if freeVolOnPallet < custTotVolume then begin
+      newstockmovf = true;
+      // BLT_AddPalletItemToStockMov(StockMovr,warehouse,-1,MatRowCnt(StockMovr),SHp.OrderNr);
+      aStockMovr[acnt-1] = StockMovr;
+    end;
+  end;
+
+  if newstockmovf then begin
+    RecordNew(StockMovr);
+    StockMovr.FrLocation = warehouse;
+    StockMovr.ToLocation = warehouse;
+    // StockMovr.TransNr = SHp.SerNr;
+    StockMovr.FileName = "COMB_SHVc";
+    freeVolOnPallet = totPalletVolume;
+  end;
+
+  totMissingQty = 0;
+  trem = SHrw.Ship;
+  remRowVolume = trem * t;
+  // LogText(0,"913 newstockmovf=" & newstockmovf & " remRowVolume=" & remRowVolume & " freeVolOnPallet=" & freeVolOnPallet & " totPalletVolume=" & totPalletVolume & " custTotVolume=" & custTotVolume & " newCustf=" & newCustf & " shquant=" & SHrw.Ship & " serial=" & SHrw.SerialNr);
+  while trem>0 begin
+    if freeVolOnPallet < t then begin
+      // BLT_AddPalletItemToStockMov(StockMovr,warehouse,-1,MatRowCnt(StockMovr),SHp.OrderNr);
+      aStockMovr[acnt] = StockMovr;
+      acnt = acnt + 1;
+      RecordNew(StockMovr);
+      StockMovr.FrLocation = warehouse;
+      StockMovr.ToLocation = warehouse;
+      // StockMovr.TransNr = SHp.SerNr;
+      StockMovr.FileName = "COMB_SHVc";
+      freeVolOnPallet = totPalletVolume;
+      newstockmovf = true;
+    end;
+
+    // LogText(0,"931 trem=" & trem);
+    rem = trem;
+    while ((rem*t) > freeVolOnPallet) begin
+      rem = rem - 1;
+    end;
+    trem = trem - rem;
+
+    StockMovementsforPosition(aStockMovr,acnt,INp,SHp.OrderNr,SHrw.ArtCode,SHrw.SerialNr,warehouse,DeliveryPosCode,DeliveryArea,shrow,rem,adelpos,adelposcnt,StockMovr,freeVolOnPallet,remRowVolume,ALevelPos,vecItemVals);
+    //rem always zero here
+  end;
+
+  if newCustf then begin
+    newCustf = false;
+  end;
+
+  if newstockmovf then begin
+    aStockMovr[acnt] = StockMovr;
+    acnt = acnt + 1;
+  end else begin
+    aStockMovr[acnt-1] = StockMovr;
+  end;
+
+  if vecItemVals[INp.Code]>0 then begin
+    StockMovementsforRemQty_Forward_Batch(aStockMovr,acnt,INp,SHp.OrderNr,SHrw.ArtCode,SHrw.SerialNr,warehouse,ALevelPos,DeliveryArea,shrow,vecItemVals[INp.Code],adelpos,adelposcnt,SHp.SerNr,vecItemVals);
+  end;
+
+LBLT_SHMakeStockMovements:;
+  RETURN;
+END;
+//EBS <--

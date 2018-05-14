@@ -1,0 +1,35 @@
+external updating procedure BLT_SMMakeStockMovement(record SDVc,integer);
+
+global updating
+function LongInt StockMovVcRecordSaveAfter(Var Record StockMovVc StockMovr, Record StockMovVc StockMov2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.StockMovVcRecordSaveAfter(StockMovr,StockMov2r,stat,check);
+  if (StockMovr.OKFlag!=0) or (StockMovr.SentOKFlag!=0 and nonblank(StockMovr.ThrouLocation)) then begin
+    BLT_SMMakeStockMovement(StockMovr,1); //From 2 to 1
+  end;
+
+  StockMovVcRecordSaveAfter = res;
+  return;
+end;
+
+global updating
+function LongInt StockMovVcRecordUpdateAfter(Var Record StockMovVc StockMovr, Record StockMovVc StockMov2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.StockMovVcRecordUpdateAfter(StockMovr,StockMov2r,stat,check);
+  if (nonblank(StockMovr.ThrouLocation)) then begin
+    if ((StockMovr.SentOKFlag!=0) and (StockMov2r.SentOKFlag==0)) then begin
+      BLT_SMMakeStockMovement(StockMovr,1); //From 2 to 1
+    end;
+  end else begin
+    if ((StockMovr.OKFlag!=0) and (StockMov2r.OKFlag==0)) then begin
+      BLT_SMMakeStockMovement(StockMovr,1); //From 2 to 1
+    end;
+  end;
+
+  StockMovVcRecordUpdateAfter = res;
+  return;
+end;

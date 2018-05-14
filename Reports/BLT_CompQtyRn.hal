@@ -1,0 +1,119 @@
+external inner procedure HT2Per(Date, Date , var string);
+
+// global
+// procedure BLT_CompQtyRClassReportDefaults(Integer wn)
+// begin
+//   record RcVc RepSpec;
+//
+//   DeselectWindow(wn,false);
+//   GetWindowRecord(wn,RepSpec);
+//   ReportDefaults(RepSpec,"BLT_CompQtyRClass");
+//
+//
+// return;
+// end;
+//
+// global
+// function boolean BLT_CompQtyRClassOnOKWindow(integer wn)
+// begin
+//   record RcVc RepSpec;
+//   boolean res;
+//
+//   res = true;
+//   GetWindowRecord(wn,RepSpec);
+//
+// LBLT_CompQtyRClassOnOKWindow:;
+//   BLT_CompQtyRClassOnOKWindow = res;
+//   return;
+// end;
+
+global
+procedure BLT_CompQtyRn(Record RcVc RepSpec)
+Begin
+  integer rw,i,rwc;
+  record SHVc SHr;
+  row SHVc SHrw;
+  boolean testf, wloop;
+  longint fromnr, tonr;
+  string 255 tstr;
+  array val totals;
+
+  StartReportJob("TEST");
+  rw = 1;
+  HT2Per(RepSpec.sStartDate,RepSpec.sEndDate,tstr);
+  Header(rw, tstr, 1);
+  rw = rw + 1;
+  EndHeader;
+
+  SetRepCol(2,80)
+  SetRepCol(3,160)
+  SetRepCol(4,340)
+  SetRepCol(5,410)
+
+  StartFormat(15);
+  OutString(0,"",USetStr(14111),false);
+  OutString(2,"",USetStr(14113),false);
+  OutString(3,"",USetStr(14283),false);
+  OutString(4,"",USetStr(1100024),true);
+  OutString(5,"",USetStr(1100025),true);
+  OutString(1,"",USetStr(18016),true);
+  EndFormat;
+  Black_Divider(1,0);
+
+  if nonblank(RepSpec.f1) then begin
+    fromnr = FirstInRange(RepSpec.f1,10);
+    tonr = LastInRange(RepSpec.f1,10);
+  end;
+
+  SHr.ShipDate = RepSpec.sStartDate;
+  wloop = true;
+  While LoopKey("ShipDate", SHr, 1, wloop) begin
+    if SHr.ShipDate > RepSpec.sEndDate then begin
+      wloop = false;
+    end else begin
+      testf = true;
+      if nonblank(RepSpec.f1) and SHr.SerNr < fromnr then begin
+        testf = false;
+      end;
+      if NonBlank(RepSpec.f1) and SHr.SerNr > tonr then begin
+        testf = false;
+      end;
+      if testf then begin
+        rwc = MatRowCnt(SHr);
+        for(i=0;i<rwc;i=i+1)begin
+          MatRowGet(SHr,i,SHrw);
+          testf = true;
+          if blank(SHrw.QuantConfByCust) then begin
+            testf = false;
+          end;
+          if testf then begin
+            StartFormat(15);
+            OutString(0,"dblSHVc",SHr.SerNr,false);
+            OutString(2,"dblINVc",SHrw.ArtCode,false);
+            OutString(3,"",SHrw.Spec,false);
+            OutVal(4,"",SHrw.QuantConfByCust,M4UVal,true);
+            OutVal(5,"",SHrw.Ship,M4UVal,true);
+            OutVal(1,"",SHrw.QuantConfByCust - SHrw.Ship,M4UVal,true);
+            EndFormat;
+            totals[0] = totals[0] + SHrw.QuantConfByCust;
+            totals[1] = totals[1] + SHrw.Ship;
+          end;
+        end;
+      end;
+    end;
+  end;
+
+  Black_Divider(1,0);
+  StartFormat(15);
+  OutString(0,"",USetStr(14332),false);
+  OutString(2,"","",false);
+  OutString(3,"","",false);
+  OutVal(4,"",totals[0],M4UVal,true);
+  OutVal(5,"",totals[1],M4UVal,true);
+  OutVal(1,"",totals[0]-totals[1],M4UVal,true);
+  EndFormat;
+
+  EndJob;
+
+return;
+end;

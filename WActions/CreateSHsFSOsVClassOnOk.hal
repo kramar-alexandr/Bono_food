@@ -1,0 +1,24 @@
+
+global
+function boolean BLT_CreateSHsFSOsVClassOnOKWindow(integer wn)
+begin
+  Boolean res;
+  record RcVc RepSpec;
+
+  res = true;
+  GetWindowRecord(wn,RepSpec);
+  if RepSpec.vals0<=0 then begin
+    MessageBox(1058,"");
+    WindowFieldGoto(wn,RepSpec,-1,"vals0",true);
+    res = false;
+  end;
+
+  if res and blank(RepSpec.f2) then begin
+    MessageBox(1058,"");
+    WindowFieldGoto(wn,RepSpec,-1,"f2",true);
+    res = false;
+  end;
+
+  BLT_CreateSHsFSOsVClassOnOKWindow = res;
+  return;
+end;

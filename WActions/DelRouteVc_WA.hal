@@ -1,0 +1,34 @@
+
+function Boolean DelRouteDClassCustCodeEFAfter(Integer wn,Integer rownr,Integer changed)
+BEGIN
+  record DelRouteVc DelRouter;
+  row DelRouteVc DelRouterw;
+  record CUVc CUr;
+  Boolean res;
+
+  res = true;
+  if ((changed!=0) and (rownr>=0)) then begin
+    GetWindowRecord(wn,DelRouter);
+    MatRowGet(DelRouter,rownr,DelRouterw);
+    CUr.Code = DelRouterw.CustCode;
+    if (ReadFirstMain(CUr,1,true)) then begin
+      DelRouterw.Comment = CUr.Name;
+      MatRowPut(DelRouter,rownr,DelRouterw);
+    end;
+    PutWindowRecord(wn,DelRouter);
+  end;
+  DelRouteDClassCustCodeEFAfter = res;
+  RETURN;
+END;
+
+global
+function Boolean DelRouteDClassAfterEditField(Integer wn,string fieldname,Integer fn,Integer rownr,Integer changed)
+BEGIN
+  Boolean res;
+
+  switch (fieldname) begin
+    case "CustCode": res = DelRouteDClassCustCodeEFAfter(wn,rownr,changed);
+  end;
+  DelRouteDClassAfterEditField = res;
+  RETURN;
+END;

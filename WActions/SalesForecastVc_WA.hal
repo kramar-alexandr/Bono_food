@@ -1,0 +1,19 @@
+remote procedure SalesForecastSumUp(var record SalesForecastVc);
+
+global
+function Boolean SalesForecastDClassAfterEditField(Integer wn,string fieldname,Integer fn,Integer rownr,Integer changed)
+BEGIN
+  Boolean res;
+  record SalesForecastVc SFr;
+
+  res = inner.SalesForecastDClassAfterEditField(wn,fieldname,fn,rownr,changed);
+
+  if rownr >=0 then begin
+    GetWindowRecord(wn,SFr);
+    SalesForecastSumUp(SFr);
+    Putwindowrecord(wn,SFr);
+  end;
+
+  SalesForecastDClassAfterEditField = res;
+  RETURN;
+END;

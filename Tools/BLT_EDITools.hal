@@ -1,0 +1,596 @@
+external inner function string 50 TimeToString(time,string,boolean);
+external inner procedure ExportXmlNL(string);
+external inner procedure ExportXmlTagOpen(string);
+external inner procedure ExportXmlTagClose(string);
+external inner function string 255 ConvertXmlString(string,Boolean);
+external inner procedure GetVATRow(string,var row VATCodeBlock);
+external inner function val FindVAT(string,val,Integer,Integer);
+external function Boolean BLT_CreateExpFile(string,string);
+
+function string 255 BLT_TimeToString(time t, string place_hl, boolean pl_holder_bl)
+begin
+  string 255 tstr;
+
+  if (nonblanktime(t)) then begin
+    if (t.hour<10) then begin
+      tstr = "0";
+    end;
+    tstr = tstr & t.hour;
+
+    tstr = tstr & ":";
+
+    if (t.minute<10) then begin
+      tstr = tstr & "0";
+    end;
+    tstr = tstr & t.minute;
+    tstr = tstr & ":00";
+  end;
+
+  BLT_TimeToString = tstr;
+  return;
+end;
+
+procedure AddToArray(val taxprcs, val taxamt, val taxsum,var array val arrTaxPrcs,var array val arrTaxAmt,var array val arrTaxSums)
+begin
+  boolean foundf;
+  integer i;
+
+  for (i=0;i<arrTaxPrcs.length;i=i+1)begin
+    if taxprcs == arrTaxPrcs[i] then begin
+      arrTaxAmt[i] = arrTaxAmt[i] + taxamt;
+      arrTaxSums[i] = arrTaxSums[i] + taxsum;
+      foundf = true;
+      i = arrTaxPrcs.length;
+    end;
+  end;
+
+  if !foundf then begin
+    i = arrTaxPrcs.length;
+    arrTaxPrcs[i] = taxprcs;
+    arrTaxAmt[i] = taxamt;
+    arrTaxSums[i] = taxsum;
+  end;
+
+  return;
+end;
+
+procedure ExportPOVc_row(record POVc POr, record LocationVc Locr, row POVc POrw,var val totqty,var integer totlines,var array val arrTaxPrcs,var array val arrTaxAmt,var array val arrTaxSums)
+begin
+  record INVc INr;
+  row VATCodeBlock VATCoderw;
+  date td;
+  val t;
+
+  if blank(POrw.ArtCode) then begin
+    GoTo LExportPOVc_row;
+  end;
+
+  INr.Code = POrw.ArtCode;
+  ReadFirstMain(INr,1,true);
+
+  GetVATRow(POrw.VATCode,VATCoderw);
+
+  totlines = totlines + 1;
+  totqty = totqty + POrw.Quant;
+  ExportXmlTagOpen("<" & "Line" & ">");
+  ExportXmlTagOpen("<" & "Line-Item" & ">");
+  ExportXmlNL("<LineNumber>" & totlines & "</LineNumber>");
+  ExportXmlNL("<EAN>" & INr.BarCode & "</EAN>");
+  ExportXmlNL("<ItemDescription>" & ConvertXmlString(POrw.Spec,false) & "</ItemDescription>");
+  ExportXmlNL("<InvoiceQuantity>" & ValToString(POrw.Quant,M4UVal,"",".",0) & "</InvoiceQuantity>");
+  ExportXmlNL("<InvoiceUnitNetPrice>" & ValToString(POrw.Price,M423Val,"",".",0) & "</InvoiceUnitNetPrice>");
+
+  t = POrw.Price;
+  if POr.InclVAT == 0 then begin
+    t = t + FindVAT(POrw.VATCode,t,POr.InclVAT,0);
+  end;
+  ExportXmlNL("<InvoiceUnitGrossPrice>" & ValToString(t,M423Val,"",".",0) & "</InvoiceUnitGrossPrice>");
+  ExportXmlNL("<UnitOfMeasure>" & ConvertXmlString(POrw.UnitCode,false) & "</UnitOfMeasure>");
+  ExportXmlNL("<ExpirationDate>" & "" & "</ExpirationDate>");
+  if nonblank(INr.UnitCoefficient) then begin
+    ExportXmlNL("<InvoicedUnitPackSize>" & ValToString(INr.UnitCoefficient,M4UVal,"",".",0) & "</InvoicedUnitPackSize>");
+  end;
+
+  ExportXmlNL("<TaxRate>" & ValToString(VATCoderw.ExVatpr,M4UVal,"",".",0) & "</TaxRate>");
+
+  t = FindVAT(POrw.VATCode,POrw.Sum,POr.InclVAT,0);
+  ExportXmlNL("<TaxAmount>" & ValToString(t,M4Val,"",".",0) & "</TaxAmount>");
+  if POr.InclVAT == 0 then begin
+    AddToArray(VATCoderw.ExVatpr,t,POrw.Sum,arrTaxPrcs,arrTaxAmt,arrTaxSums);
+    ExportXmlNL("<NetAmount>" & ValToString(POrw.Sum,M4Val,"",".",0) & "</NetAmount>");
+    ExportXmlNL("<GrossAmount>" & ValToString(POrw.Sum + t,M4Val,"",".",0) & "</GrossAmount>");
+  end else begin
+    AddToArray(VATCoderw.ExVatpr,t,POrw.Sum-t,arrTaxPrcs,arrTaxAmt,arrTaxSums);
+    ExportXmlNL("<NetAmount>" & ValToString(POrw.Sum - t,M4Val,"",".",0) & "</NetAmount>");
+    ExportXmlNL("<GrossAmount>" & ValToString(POrw.Sum,M4Val,"",".",0) & "</GrossAmount>");
+  end;
+  ExportXmlTagClose("</" & "Line-Item" & ">");
+
+  ExportXmlTagOpen("<" & "Line-Delivery" & ">");
+  ExportXmlNL("<DeliveryLocationNumber>" & ConvertXmlString(Locr.ILNCode,false) & "</DeliveryLocationNumber>");
+  ExportXmlNL("<CodeByBuyer>" & ConvertXmlString(Locr.Code,false) & "</CodeByBuyer>");
+  ExportXmlNL("<Name>" & ConvertXmlString(Locr.Name,false) & "</Name>");
+
+  td = POr.PlanShipDate;
+  // if nonblank(POrw.PlanShipRow) then begin
+  //   td = POrw.PlanShipRow;
+  // end;
+  ExportXmlNL("<DeliveryDate>" & DateToString(td,"YYYY-MM-DD") & "</DeliveryDate>");
+  ExportXmlNL("<DespatchNumber>" & "" & "</DespatchNumber>");
+  ExportXmlTagClose("</" & "Line-Delivery" & ">");
+  ExportXmlTagClose("</" & "Line" & ">");
+
+LExportPOVc_row:;
+  return;
+end;
+
+procedure ExportORVc_row(record ORVc ORr,row ORVc ORrw,var val totqty,var val totvat,var integer totrows)
+begin
+  record INVc INr;
+  record UnitVc Unitr;
+  row VATCodeBlock VATCoderw;
+  val vatsum,t;
+
+  if blank(ORrw.ArtCode) then begin
+    GoTo LExportORVc_row;
+  end;
+
+  INr.Code = ORrw.ArtCode;
+  Readfirstmain(INr,1,true);
+
+  Unitr.Code = INr.Unittext;
+  ReadFirstMain(Unitr,1,true);
+
+  GetVATRow(ORrw.VATCode,VATCoderw);
+
+  totrows = totrows + 1;
+  totqty = totqty + ORrw.Quant;
+  ExportXmlTagOpen("<" & "Line" & ">");
+  ExportXmlTagOpen("<" & "Line-Item" & ">");
+  ExportXmlNL("<LineNumber>" & totrows & "</LineNumber>");
+  ExportXmlNL("<LineReference>" & totrows & "</LineReference>");
+  ExportXmlNL("<EAN>" & INr.BarCode & "</EAN>");
+  ExportXmlNL("<BuyerItemCode>" & ORrw.CustArtCode & "</BuyerItemCode>");
+  ExportXmlNL("<SupplierItemCode>" & ORrw.ArtCode & "</SupplierItemCode>");
+  ExportXmlNL("<ItemDescription>" & ConvertXmlString(ORrw.Spec,false) & "</ItemDescription>");
+  ExportXmlNL("<ItemType>" & "It" & "</ItemType>");
+  ExportXmlNL("<ExpirationDate>" & DateToString(ORrw.MinBestBefore,"YYYY-MM-DD") & "</ExpirationDate>");
+  ExportXmlNL("<OrderedQuantity>" & ValToString(ORrw.Quant,M4UVal,"",".",0) & "</OrderedQuantity>");
+  ExportXmlNL("<OrderedUnitPacksize>" & ValToString(INr.NetWeight,M4UVal,"",".",0) & "</OrderedUnitPacksize>");
+  ExportXmlNL("<UnitPacksize>" & "0" & "</UnitPacksize>");
+  ExportXmlNL("<UnitOfMeasure>" & ConvertXmlString(Unitr.Comment,false) & "</UnitOfMeasure>");
+  ExportXmlNL("<OrderedUnitNetPrice>" & ValToString(ORrw.Price,M423Val,"",".",0) & "</OrderedUnitNetPrice>");
+  ExportXmlNL("<PromotionReference>" & "" & "</PromotionReference>");
+  ExportXmlNL("<ExpirationDate>" & DateToString(CurrentDate,"YYYY-MM-DD") & "T16:00:00" & "</ExpirationDate>");
+  ExportXmlNL("<MaxExpirationDate>" & DateToString(CurrentDate,"YYYY-MM-DD") & "T16:00:00" & "</MaxExpirationDate>");
+  ExportXmlNL("<TaxRate>" & ValToString(VATCoderw.ExVatpr,M423Val,"",".",0) & "</TaxRate>");
+
+  vatsum = FindVAT(ORrw.VATCode,ORrw.Sum,ORr.InclVAT,0);
+  totvat = totvat + vatsum;
+  ExportXmlNL("<TaxAmount>" & ValToString(vatsum,M4Val,"",".",0) & "</TaxAmount>");
+
+  if ORr.InclVAT == 1 then begin
+    ExportXmlNL("<NetAmount>" & ValToString(ORrw.Sum - vatsum,M4Val,"",".",0) & "</NetAmount>");
+  end else begin
+    ExportXmlNL("<NetAmount>" & ValToString(ORrw.Sum,M4Val,"",".",0) & "</NetAmount>");
+  end;
+
+  ExportXmlNL("<BatchNumber>" & "" & "</BatchNumber>");
+  ExportXmlNL("<CountryOfOrgin>" & "" & "</CountryOfOrgin>");
+  ExportXmlNL("<QualityCertificate>" & "" & "</QualityCertificate>");
+  ExportXmlNL("<Standart>" & "" & "</Standart>");
+  ExportXmlNL("<RetailPrice>" & "0" & "</RetailPrice>");
+  ExportXmlNL("<PrintRetailLabel>" & "false" & "</PrintRetailLabel>");
+  ExportXmlNL("<StorageTemperature>" & ConvertXmlString(INr.UserStr2,false) & "</StorageTemperature>");
+  ExportXmlNL("<OrderedUnitListPrice>" & ValToString(ORrw.Price,M423Val,"",".",0) & "</OrderedUnitListPrice>");
+  t = ORrw.vRebate;
+  if blank(t) then begin
+    t = 0;
+  end;
+  ExportXmlNL("<Discount>" & ValToString(t,M4UVal,"",".",0) & "</Discount>");
+
+  ExportXmlNL("<Weight>" & "0" & "</Weight>");
+  ExportXmlNL("<Volume>" & "0" & "</Volume>");
+  ExportXmlNL("<Boxes>" & "0" & "</Boxes>");
+  ExportXmlNL("<Pallets>" & "0" & "</Pallets>");
+
+  ExportXmlTagClose("</" & "Line-Item" & ">");
+  ExportXmlTagClose("</" & "Line" & ">");
+
+LExportORVc_row:;
+  return;
+end;
+
+procedure ExportInvPartyInfo(string tag, string iln, string TaxID, string regnr,
+                          string name, string addr1, string addr2, string addr3,
+                          string addr4)
+begin
+
+  ExportXmlTagOpen("<" & tag & ">");
+  ExportXmlNL("<ILN>" & iln & "</ILN>");
+  if nonblank(TaxID) then begin
+    ExportXmlNL("<TaxID>" & TaxID & "</TaxID>");
+  end;
+  ExportXmlNL("<UtilizationRegisterNumber>" & regnr & "</UtilizationRegisterNumber>");
+  ExportXmlNL("<Name>" & ConvertXmlString(name,false) & "</Name>");
+  ExportXmlNL("<StreetAndNumber>" & ConvertXmlString(addr1,false) & "</StreetAndNumber>");
+  ExportXmlNL("<CityName>" & ConvertXmlString(addr2,false) & "</CityName>");
+  if nonblank(addr3) then begin
+    ExportXmlNL("<PostalCode>" & ConvertXmlString(addr3,false) & "</PostalCode>");
+  end;
+  ExportXmlNL("<Country>" & ConvertXmlString(addr4,false) & "</Country>");
+  ExportXmlTagClose("</" & tag & ">");
+
+  return;
+end;
+
+procedure ExportPartyInfo(string tag, string iln, string TaxID, string accno,
+                          string name, string addr1, string addr2, string addr3,
+                          string addr4, string contact, string code1, string code2)
+begin
+
+  ExportXmlTagOpen("<" & tag & ">");
+  ExportXmlNL("<ILN>" & iln & "</ILN>");
+  ExportXmlNL("<TaxID>" & TaxID & "</TaxID>");
+  ExportXmlNL("<AccountNumber>" & accno & "</AccountNumber>");
+  ExportXmlNL("<Name>" & ConvertXmlString(name,false) & "</Name>");
+  ExportXmlNL("<StreetAndNumber>" & ConvertXmlString(addr1,false) & "</StreetAndNumber>");
+  ExportXmlNL("<City>" & ConvertXmlString(addr2,false) & "</City>");
+  ExportXmlNL("<PostalCode>" & ConvertXmlString(addr3,false) & "</PostalCode>");
+  ExportXmlNL("<Country>" & ConvertXmlString(addr4,false) & "</Country>");
+  if nonblank(contact) then begin
+    ExportXmlNL("<Contact>" & ConvertXmlString(contact,false) & "</Contact>");
+  end;
+  ExportXmlNL("<CodeByBuyer>" & ConvertXmlString(code1,false) & "</CodeByBuyer>");
+  ExportXmlNL("<CodeBySeller>" & ConvertXmlString(code2,false) & "</CodeBySeller>");
+  ExportXmlTagClose("</" & tag & ">");
+
+  return;
+end;
+
+function string 255 OR_Series_prefix(longint sernr)
+begin
+  string 255 res;
+  record ORSerBlock ORSerbl;
+  row ORSerBlock ORSerrw;
+  integer i,rwc;
+
+  res = "";
+  BlockLoad(ORSerbl);
+  rwc = MatRowCnt(ORSerbl);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(ORSerbl,i,ORSerrw);
+    if ORSerrw.TSerStart <= sernr and ORSerrw.TSerEnd >= sernr then begin
+      res = ORSerrw.ExpPrefix;
+      i = rwc;
+    end;
+  end;
+
+  OR_Series_prefix = res;
+  return;
+end;
+
+function string 255 PO_Series_prefix(longint sernr)
+begin
+  string 255 res;
+  record POSerBlock POSerbl;
+  row POSerBlock POSerrw;
+  integer i,rwc;
+
+  res = "";
+  BlockLoad(POSerbl);
+  rwc = MatRowCnt(POSerbl);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(POSerbl,i,POSerrw);
+    if POSerrw.TSerStart <= sernr and POSerrw.TSerEnd >= sernr then begin
+      res = POSerrw.ExpPrefix;
+      i = rwc;
+    end;
+  end;
+
+  PO_Series_prefix = res;
+  return;
+end;
+
+function boolean EDI_ExportORVc(var record ORVc ORr)
+begin
+  record ORVc oldORr;
+  row ORVc ORrw;
+  record InvBalXMLExpFolBlock InvBalXMLExpFolr;
+  record CYBlock CYr;
+  record CUVc CUr;
+  record LocationVc Locationr;
+  integer i,rwc,totrows;
+  val totqty,totvat;
+
+  BlockLoad(InvBalXMLExpFolr);
+  BlockLoad(CYr);
+
+  CUr.Code = ORr.CustCode;
+  ReadFirstMain(CUr,1,true);
+
+  Locationr.Code = ORr.Location;
+  ReadFirstMain(Locationr,1,true);
+
+  SetExportCodePage("UTF-8");
+  ExportXmlTagOpen("<ns0:Document-Order xmlns:ns0=\"http://schemas.nnl/edi/order\">");
+
+  //Document part
+  ExportXmlTagOpen("<Document>");
+  ExportXmlTagOpen("<Sender-Party>");
+  ExportXmlNL("<ILN>" & InvBalXMLExpFolr.DefSendILN & "</ILN>");
+  ExportXmlNL("<Name>" & ConvertXmlString(CYr.CompName,false) & "</Name>");
+  ExportXmlNL("<StreetAndNumber>" & ConvertXmlString(CYr.Addr0 & " " & CYr.Addr1,false) & "</StreetAndNumber>");
+  ExportXmlNL("<City>" & ConvertXmlString(CYr.Addr2,false) & "</City>");
+  ExportXmlNL("<Country>" & ConvertXmlString(CYr.Addr3,false) & "</Country>");
+  ExportXmlNL("<SenderCodeBySender>" & ConvertXmlString(InvBalXMLExpFolr.DefSendCustCode,false) & "</SenderCodeBySender>");
+  ExportXmlNL("<Contact></Contact>");
+  ExportXmlTagClose("</Sender-Party>");
+
+  ExportXmlTagOpen("<Receiver-Party>");
+  ExportXmlNL("<ILN>" & InvBalXMLExpFolr.LogistCompILN & "</ILN>");
+  ExportXmlNL("<Name></Name>");
+  ExportXmlNL("<StreetAndNumber></StreetAndNumber>");
+  ExportXmlNL("<City></City>");
+  ExportXmlNL("<Country></Country>");
+  ExportXmlNL("<ReceiverCodeBySender></ReceiverCodeBySender>");
+  ExportXmlNL("<Contact></Contact>");
+  ExportXmlNL("<ReceiverCodeByReceiver></ReceiverCodeByReceiver>");
+  ExportXmlNL("<SenderCodeByReceiver></SenderCodeByReceiver>");
+  ExportXmlTagClose("</Receiver-Party>");
+
+  ExportXmlTagOpen("<Document-Identification>");
+  ExportXmlNL("<UniqueDocumentId>" & ORr.CustOrdNr & "</UniqueDocumentId>");
+  ExportXmlNL("<DateTime>" & DateToString(CurrentDate,"YYYY-MM-DD") & "T" & BLT_TimeToString(CurrentTime,"HH:MM:SS",false) & "</DateTime>");
+  ExportXmlTagClose("</Document-Identification>");
+  ExportXmlTagClose("</Document>");
+
+  ExportXmlTagOpen("<Order-Header>");
+  ExportXmlNL("<OrderNumber>" & OR_Series_prefix(ORr.SerNr) &  ORr.SerNr & "</OrderNumber>");
+  ExportXmlNL("<OrderDate>" & DateToString(ORr.OrdDate,"YYYY-MM-DD") & "T00:00:00" & "</OrderDate>");
+  ExportXmlNL("<ExpectedDeliveryDate>" & DateToString(ORr.PlanShipDate,"YYYY-MM-DD") & "T16:00:00" & "</ExpectedDeliveryDate>");
+  ExportXmlNL("<ExpectedDeliveryTime>" & DateToString(ORr.PlanShipDate,"YYYY-MM-DD") & "T16:00:00" & "</ExpectedDeliveryTime>");
+  ExportXmlNL("<PromotionReference></PromotionReference>");
+  ExportXmlNL("<DocumentFunctionCode>" & 0 & "</DocumentFunctionCode>");
+  ExportXmlNL("<Remarks>" & ConvertXmlString(ORr.Comment,false) & "</Remarks>");
+  ExportXmlNL("<OrderCurrency>" & ConvertXmlString(ORr.CurncyCode,false) & "</OrderCurrency>");
+  ExportXmlNL("<OrderType>" & 20 & "</OrderType>");
+  ExportXmlNL("<OrderTypeCode>" & "SO" & "</OrderTypeCode>");
+  ExportXmlNL("<MessageID>" & "" & "</MessageID>");
+  ExportXmlNL("<TextOnInvoice>" & "" & "</TextOnInvoice>");
+  ExportXmlNL("<VeterinaryCertificate>" & ConvertXmlString(InvBalXMLExpFolr.VetCertNo,false) & "</VeterinaryCertificate>");
+  ExportXmlNL("<Stage>" & "RECEIVED" & "</Stage>");
+  ExportXmlTagClose("</Order-Header>");
+
+  ExportXmlTagOpen("<Order-Parties>");
+  ExportPartyInfo("Buyer",CUr.RecipientGLN,"","",ORr.Addr0,ORr.Addr1 & " " & ORr.Addr2,ORr.Addr3,ORr.InvAddr4,ORr.InvAddr3,"","","");
+  ExportPartyInfo("Seller",InvBalXMLExpFolr.DefSendILN,"","",CYr.CompName,CYr.Addr0 & " " & CYr.Addr1,CYr.Addr2,CYr.Addr4,CYr.Addr3,"","","");
+  ExportPartyInfo("DeliveryPoint",ORr.DelRecipientGLN,"","",ORr.ShipAddr0,ORr.ShipAddr1 & " " & ORr.ShipAddr2,ORr.ShipAddr3,ORr.DelAddr4,ORr.DelAddr3,"","","");
+  ExportPartyInfo("ShipFrom",Locationr.ILNCode,"","",Locationr.Name,Locationr.Addr0 & " " & Locationr.Addr1,Locationr.Addr2,Locationr.Addr4,Locationr.Addr3,"","","");
+  ExportPartyInfo("Payer",CUr.RecipientGLN,"","",ORr.Addr0,ORr.Addr1 & " " & ORr.Addr2,ORr.Addr3,ORr.InvAddr4,ORr.InvAddr3,"","","");
+  ExportXmlTagClose("</Order-Parties>");
+
+  ExportXmlTagOpen("<Order-Lines>");
+  rwc = MatRowCnt(ORr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(ORr,i,ORrw);
+    ExportORVc_row(ORr,ORrw,totqty,totvat,totrows);
+  end;
+  ExportXmlTagClose("</Order-Lines>");
+
+  ExportXmlTagOpen("<Order-Summary>");
+  ExportXmlNL("<TotalLines>" & totrows & "</TotalLines>");
+  ExportXmlNL("<TotalOrderedAmount>" & ValToString(totqty,M4UVal,"",".",0) & "</TotalOrderedAmount>");
+  ExportXmlNL("<TotalNetAmount>" & ValToString(ORr.Sum4 - totvat,M4Val,"",".",0) & "</TotalNetAmount>");
+  ExportXmlNL("<TotalTaxAmount>" & ValToString(totvat,M4Val,"",".",0) & "</TotalTaxAmount>");
+  ExportXmlNL("<TotalGrossAmount>" & ValToString(ORr.Sum4,M4Val,"",".",0) & "</TotalGrossAmount>");
+  ExportXmlNL("<Discount>" & 0 & "</Discount>");
+  ExportXmlNL("<AditionalInformation>" & "" & "</AditionalInformation>");
+  ExportXmlTagClose("</Order-Summary>");
+
+  ExportXmlTagClose("</ns0:Document-Order>");
+
+  EDI_ExportORVc = true;
+  return;
+end;
+
+procedure EDI_ExportPOVc(record POVc POr)
+begin
+  row POVc POrw;
+  record LocationVc Locationr;
+  record CUVc CUr;
+  record InvBalXMLExpFolBlock InvBalXMLExpFolr;
+  record CYBlock CYr;
+  array val arrTaxPrcs,arrTaxAmt,arrTaxSums;
+  integer i,rwc,totlines;
+  val totqty,t;
+
+  BlockLoad(InvBalXMLExpFolr);
+  BlockLoad(CYr);
+
+  CUr.Code = POr.VECode;
+  ReadFirstMain(CUr,1,true);
+
+  Locationr.Code = POr.Location;
+  ReadFirstMain(Locationr,1,true);
+
+  SetExportCodePage("UTF-8");
+  ExportXmlNL("<?xml version=\"1.0\" encoding=\"Utf-8\"?>");
+  ExportXmlTagOpen("<Document-Invoice xmlns=\"http://www.nnl.lt/DocumentInvoice\">");
+  ExportXmlTagOpen("<Invoice-Header>");
+  ExportXmlNL("<InvoiceNumber>" & PO_Series_prefix(POr.SerNr) & POr.SerNr & "</InvoiceNumber>");
+  ExportXmlNL("<InvoiceDate>" & DateToString(POr.TransDate,"YYYY-MM-DD") & "</InvoiceDate>");
+  ExportXmlNL("<InvoicePaymentDueDate>" & DateToString(POr.TransDate,"YYYY-MM-DD") & "</InvoicePaymentDueDate>");
+  ExportXmlNL("<InvoicePostDate>" & DateToString(POr.TransDate,"YYYY-MM-DD") & "</InvoicePostDate>");
+  ExportXmlNL("<InvoiceNumber>" & POr.CurncyCode & "</InvoiceNumber>");
+  ExportXmlTagOpen("<Order>");
+  ExportXmlNL("<BuyerOrderNumber>" & POr.SerNr & "</BuyerOrderNumber>");
+  ExportXmlNL("<BuyerOrderDate>" & DateToString(POr.TransDate,"YYYY-MM-DD") & "</BuyerOrderDate>");
+  ExportXmlTagClose("</Order>");
+  ExportXmlTagOpen("<Delivery>");
+  ExportXmlNL("<DeliveryLocationNumber>" & Locationr.ILNCode & "</DeliveryLocationNumber>");
+  ExportXmlNL("<CodeByBuyer>" & POr.Location & "</CodeByBuyer>");
+  ExportXmlNL("<Name>" & ConvertXmlString(Locationr.Name,false) & "</Name>");
+  ExportXmlNL("<StreetAndNumber>" & ConvertXmlString(Locationr.Addr0 & " " & Locationr.Addr1,false) & "</StreetAndNumber>");
+  ExportXmlNL("<CityName>" & ConvertXmlString(Locationr.Addr2,false) & "</CityName>");
+  ExportXmlNL("<Country>" & ConvertXmlString(Locationr.Addr3,false) & "</Country>");
+  ExportXmlNL("<DeliveryDate>" & DateToString(POr.PlanShipDate, "YYYY-MM-DD") & "</DeliveryDate>");
+  ExportXmlNL("<DespatchNumber>" & POr.SerNr & "</DespatchNumber>");
+  ExportXmlTagClose("</Delivery>");
+  ExportXmlTagClose("</Invoice-Header>");
+
+  ExportXmlTagOpen("<Document-Parties>");
+  ExportXmlTagOpen("<Sender>");
+  ExportXmlNL("<ILN>" & CUr.RecipientGLN & "</ILN>");
+  ExportXmlNL("<Name>" & ConvertXmlString(POr.Addr0, false) & "</Name>");
+  ExportXmlTagClose("</Sender>");
+  ExportXmlTagOpen("<Receiver>");
+  ExportXmlNL("<ILN>" & InvBalXMLExpFolr.LogistCompILN & "</ILN>");
+  ExportXmlNL("<Name>" & "" & "</Name>");
+  ExportXmlTagClose("</Receiver>");
+  ExportXmlTagClose("</Document-Parties>");
+  ExportXmlTagOpen("<Invoice-Parties>");
+  ExportInvPartyInfo("Buyer",InvBalXMLExpFolr.DefSendILN,CYr.VATNr,CYr.OrgNr,CYr.CompName,CYr.Addr0 & " " & CYr.Addr1,CYr.Addr2,CYr.Addr4,CYr.Addr3);
+  ExportInvPartyInfo("Payer",InvBalXMLExpFolr.DefSendILN,CYr.VATNr,CYr.OrgNr,CYr.CompName,CYr.Addr0 & " " & CYr.Addr1,CYr.Addr2,CYr.Addr4,CYr.Addr3);
+  ExportInvPartyInfo("Invoicee",InvBalXMLExpFolr.DefSendILN,CYr.VATNr,CYr.OrgNr,CYr.CompName,CYr.Addr0 & " " & CYr.Addr1,CYr.Addr2,CYr.Addr4,CYr.Addr3);
+  ExportInvPartyInfo("Seller",CUr.RecipientGLN,"",CUr.RegNr1,POr.Addr0,CUr.InvAddr0 & " " & CUr.InvAddr1,CUr.InvAddr2,"",CUr.InvAddr3);
+  ExportInvPartyInfo("Payee",CUr.RecipientGLN,"",CUr.RegNr1,POr.Addr0,CUr.InvAddr0 & " " & CUr.InvAddr1,CUr.InvAddr2,"",CUr.InvAddr3);
+  ExportXmlTagClose("</Invoice-Parties>");
+
+
+  ExportXmlTagOpen("<Invoice-Lines>");
+  rwc = MatRowCnt(POr);
+  for(i=0;i<rwc;i=i+1)begin
+    MatRowGet(POr,i,POrw);
+    ExportPOVc_row(POr, Locationr, POrw, totqty, totlines, arrTaxPrcs, arrTaxAmt, arrTaxSums);
+  end;
+  ExportXmlTagClose("</Invoice-Lines>");
+  ExportXmlTagOpen("<Invoice-Summary>");
+  ExportXmlTagOpen("<Tax-Summary>");
+  t = 0;
+  for (i=0;i<arrTaxPrcs.length;i=i+1) begin
+    ExportXmlTagOpen("<Tax-Summary-Line>");
+    ExportXmlNL("<TaxRate>" & ValToString(arrTaxPrcs[i],M4Val,"",".",0) & "</TaxRate>");
+    ExportXmlNL("<TaxAmount>" & ValToString(arrTaxAmt[i],M4Val,"",".",0) & "</TaxAmount>");
+    ExportXmlNL("<TaxableAmount>" & ValToString(arrTaxSums[i],M4Val,"",".",0) & "</TaxableAmount>");
+    ExportXmlTagClose("</Tax-Summary-Line>");
+    t = t + arrTaxAmt[i];
+  end;
+  ExportXmlTagClose("</Tax-Summary>");
+  ExportXmlNL("<TotalLines>" & totlines & "</TotalLines>");
+  ExportXmlNL("<TotalInvoicedAmount>" & ValToString(totqty,M4UVal,"",".",0) & "</TotalInvoicedAmount>");
+  ExportXmlNL("<TotalNetAmount>" & ValToString(POr.Sum1,M4Val,"",".",0) & "</TotalNetAmount>");
+  ExportXmlNL("<TotalTaxAmount>" & ValToString(t,M4Val,"",".",0) & "</TotalTaxAmount>");
+  ExportXmlNL("<TotalGrossAmount>" & ValToString(POr.Sum4,M4Val,"",".",0) & "</TotalGrossAmount>");
+
+  ExportXmlTagClose("</Invoice-Summary>");
+  ExportXmlTagClose("</Document-Invoice>");
+
+  return;
+end;
+
+global
+function boolean BLT_ExportEDI_ORVc(var record ORVc ORr)
+begin
+  boolean res;
+  record LocationVc Locationr;
+  string 255 filename,exportpath,tmpfile;
+
+  Locationr.Code = ORr.Location;
+  if !ReadFirstMain(Locationr,1,true) then begin
+    GoTo LBLT_ExportEDI_ORVc;
+  end;
+
+  if Locationr.AutoExpOR == 0 or blank(Locationr.ORExportFolder) then begin
+    GoTo LBLT_ExportEDI_ORVc;
+  end;
+
+  filename = DateToString(CurrentDate,"YYYYMMDD") & "_" & TimeToString(CurrentTime,"HHMMSS",false) & "_" & ORr.SerNr & ".xml";
+  // BLT_CreateExpFile(filename, exportpath);
+
+  SetFileOnServer(true); //thsi is needed for win server
+  tmpfile = "tmp/" & filename;
+
+  if FileExists(tmpfile) then begin
+    Delete_File(tmpfile);
+  end;
+
+  //Create export file
+  BLT_CreateExpFile(filename,"tmp");
+
+  //Open export file
+  OpenExportFile(tmpfile, true);
+
+  //Export ORVc record
+  EDI_ExportORVc(ORr);
+
+  //Close file
+  CloseFile;
+
+  //Move file
+  // LogText(0,"filename=" & filename);
+  MoveFile(filename,"tmp",Locationr.ORExportFolder);
+  SetFileOnServer(false);
+
+  if ORr.BLT_SentToLogistics == 0 then begin
+    ORr.BLT_SentToLogistics = 1;
+  end;
+  res = true;
+
+LBLT_ExportEDI_ORVc:;
+  BLT_ExportEDI_ORVc = res;
+  return;
+end;
+
+global
+function boolean BLT_ExportEDI_POVc(var record POVc POr)
+begin
+  boolean res;
+  record LocationVc Locationr;
+  string 255 filename,exportpath,tmpfile;
+
+  Locationr.Code = POr.Location;
+  if !ReadFirstMain(Locationr,1,true) then begin
+    GoTo LBLT_ExportEDI_POVc;
+  end;
+
+  if Locationr.AutoExpPO == 0 or blank(Locationr.POExportFolder) then begin
+    GoTo LBLT_ExportEDI_POVc;
+  end;
+
+  filename = DateToString(CurrentDate,"YYYYMMDD") & "_" & TimeToString(CurrentTime,"HHMMSS",false) & "_" & POr.SerNr & ".xml";
+  // BLT_CreateExpFile(filename, exportpath);
+
+  SetFileOnServer(true); //thsi is needed for win server
+  tmpfile = "tmp/" & filename;
+
+  if FileExists(tmpfile) then begin
+    Delete_File(tmpfile);
+  end;
+
+  //Create export file
+  BLT_CreateExpFile(filename,"tmp");
+
+  //Open export file
+  OpenExportFile(tmpfile, true);
+
+  //Export ORVc record
+  EDI_ExportPOVc(POr);
+
+  //Close file
+  CloseFile;
+
+  //Move file
+  LogText(0,"filename=" & filename);
+  MoveFile(filename,"tmp",Locationr.POExportFolder);
+  SetFileOnServer(false);
+
+  if POr.BLT_SentToLogistics == 0 then begin
+    POr.BLT_SentToLogistics = 1;
+  end;
+  res = true;
+
+LBLT_ExportEDI_POVc:;
+  BLT_ExportEDI_POVc = res;
+  return;
+end;

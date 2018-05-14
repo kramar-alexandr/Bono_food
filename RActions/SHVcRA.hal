@@ -1,0 +1,61 @@
+external updating procedure BLT_SHMakeStockMovement(record SHVc,integer);
+
+global updating
+function LongInt SHVcRecordSaveAfter(Var Record SHVc SHr, Record SHVc SH2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.SHVcRecordSaveAfter(SHr,SH2r,stat,check);
+  if (SHr.OKFlag!=0) then begin
+    BLT_SHMakeStockMovement(SHr,1); //From 2 to 1
+  end;
+
+  SHVcRecordSaveAfter = res;
+  return;
+end;
+
+global updating
+function LongInt SHVcRecordUpdateAfter(Var Record SHVc SHr, Record SHVc SH2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.SHVcRecordUpdateAfter(SHr,SH2r,stat,check);
+  if ((SHr.OKFlag!=0) and (SH2r.OKFlag==0)) then begin
+    BLT_SHMakeStockMovement(SHr,1); //From 2 to 1
+  end;
+
+  SHVcRecordUpdateAfter = res;
+  return;
+end;
+
+global updating
+function LongInt SHVcRecordSave(Var Record SHVc SHr, Record SHVc SH2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.SHVcRecordSave(SHr,SH2r,stat,check);
+
+  if (SHr.OKFlag!=0) then begin
+    SHr.BLT_Importf = 1;
+    SHr.BLT_Exportf = 1;
+  end;
+
+  SHVcRecordSave = res;
+  return;
+end;
+
+global updating
+function LongInt SHVcRecordUpdate(Var Record SHVc SHr, Record SHVc SH2r, LongInt stat, LongInt check)
+begin
+  LongInt res;
+
+  res = inner.SHVcRecordUpdate(SHr,SH2r,stat,check);
+
+  if ((SHr.OKFlag!=0) and (SH2r.OKFlag==0)) then begin
+    SHr.BLT_Importf = 1;
+    SHr.BLT_Exportf = 1;
+  end;
+
+  SHVcRecordUpdate = res;
+  return;
+end;
