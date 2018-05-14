@@ -774,18 +774,26 @@ begin
       if (RepSpec.flags[16]!=0 and RepSpec.flags[10]!=3) then begin
         OutString(60,0,USetStr(3509),false);
         OutString(120,0,USetStr(2353),false);
-        if(RepSpec.flags[28]==1)then begin
-					OutString(150,0,USetStr(1100037),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
-				end;
-				if(RepSpec.flags[29]==1)then begin
-					OutString(160,0,USetStr(1100038),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
-				end;
+        
         if (overviewpervatcodef) then begin
           OutString(170,0,USetStr(2358),false);
+          if(RepSpec.flags[28]==1)then begin
+						OutString(180,0,USetStr(1100037),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+					end;
+					if(RepSpec.flags[29]==1)then begin
+						OutString(220,0,USetStr(1100038),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+					end;
         end else begin
           OutString(170,0,USetStr(2354),false);
+          if(RepSpec.flags[28]==1)then begin
+						OutString(220,0,USetStr(1100037),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+					end;
+					if(RepSpec.flags[29]==1)then begin
+						OutString(260,0,USetStr(1100038),false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+					end;
           OutString(305,0,USetStr(2358),false);
         end;
+        
       end else begin
         OutString(60,0,USetStr(2353),false);//60
         OutString(110,0,USetStr(2354),false);//110
@@ -1588,9 +1596,23 @@ LkInvoiceTypeCredit1:;
               StartFormat(15);
               if (RepSpec.flags[16]!=0 and RepSpec.flags[10]!=3) then begin
                 OutStringOvst(0,"DblCustPS2",IVr.SerNr,false,IVr.Invalid);
+                if(RepSpec.flags[27]==1)then begin
+									OutString(20,0,IVr.ShipAddr1,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+								end;
+								if(RepSpec.flags[26]==1)then begin
+									OutString(40,0,IVr.DelAddrCode,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:53
+								end;
                 OutStringOvst(60,0,IVr.OfficialSerNr,false,IVr.Invalid);
                 OutDate(120,0,IVr.InvDate,false);
                 OutStringCut(170,270,0,IVr.Addr0,false,0);
+                if(RepSpec.flags[28]==1)then begin
+									OutString(220,0,IVr.Sorting,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+								end;
+								if(RepSpec.flags[29]==1)then begin
+									OutString(260,0,IVr.BLT_TotalNetWeight,false);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:06:52
+								end;
+								TotalWeight = TotalWeight + IVr.BLT_TotalNetWeight;// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 14 May 2018 11:26:44
+                
                 OutString(305,0,tstr,false);
               end else begin
                 if (RepSpec.flags[10]==3) then begin
