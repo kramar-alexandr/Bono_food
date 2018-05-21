@@ -67,6 +67,7 @@ external function Boolean Date2Test(string,Date,string,Integer);
 external function Boolean SerNrTestSHVc(LongInt,Date,var Boolean);
 external function val FindPUBaseRate2forSerialNr(string,string);
 external outer function boolean BLT_CheckSHRowBestBefore(record SHVc,row SHVc); //EBS
+remote updating function Integer PasteSHInInvoice(record SHVc,var record IVVc);// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 21 May 2018 13:31:00
 
 function Boolean StockMovOKedForSH(LongInt shnr,var LongInt stmovnr)
 begin
@@ -1669,7 +1670,15 @@ begin
       SHOK(SHr);
       SMSWhenSHOK(SHr.OrderNr,SHr.CustCode,1);
       if (OSb.CreateIVonSHOK!=0) then begin
-        if (RecordAction_raPasteOrdInInv(IVr,SHr.OrderNr,true,errcode)==0) then begin
+      	if(PasteSHInInvoice(SHr,IVr)==0)then begin// Edit ************************** BPI Ukraine - KramarAlexandr - Monday, 21 May 2018 13:14:06
+      		RecordCopy(oldIVr,IVr);
+          IVr.OKFlag = 1;
+          RecordUpdate(oldIVr,IVr,true);
+          if (AAb.InvoicePrinting!=0) then begin
+            PrintDocument(IVr,"InvForm",false);
+          end;
+      	end;
+        /*if (RecordAction_raPasteOrdInInv(IVr,SHr.OrderNr,true,errcode)==0) then begin
           RecordCopy(oldIVr,IVr);
           IVr.OKFlag = 1;
           RecordUpdate(oldIVr,IVr,true);
@@ -1677,7 +1686,8 @@ begin
           if (AAb.InvoicePrinting!=0) then begin
             PrintDocument(IVr,"InvForm",false);
           end;
-        end;
+        end;*/
+        
       end;
     end;
   end;
